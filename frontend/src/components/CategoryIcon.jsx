@@ -1,6 +1,6 @@
 import { categoryStyle } from '../categories.js'
 
-/** A round dark badge with the category's icon in the category's color. */
+/** A round badge tinted with the category's color, with its icon in a deeper shade. */
 export default function CategoryIcon({ name, size = 44 }) {
   const { color, Icon } = categoryStyle(name)
   return (

@@ -39,6 +39,11 @@ test.each([
   expect(parseAmount(text)).toBe(cents)
 })
 
-test.each(['', '.', 'abc', '12.345', '-5', '1.2.3'])('rejects %j', (text) => {
+test.each([
+  '', '.', 'abc', '12.345', '-5', '1.2.3',
+  '12,50',    // a French decimal comma: must NOT be read as $1,250.00
+  '1,23',     // a comma that isn't in a thousands position
+  '1234,567', // same
+])('rejects %j', (text) => {
   expect(parseAmount(text)).toBeNull()
 })

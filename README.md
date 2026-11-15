@@ -133,7 +133,7 @@ budget_app/
 | Refunds | Dashboard uses net per category | A $25 refund lowers that category's spending |
 | Look | Dark; phones get a floating bottom nav, desktops (960px+) a sidebar and two-column pages | Follows the Dribbble budget-app shot we picked |
 | Responsive layout | One set of components; CSS decides the layout (phone < 960px, icon rail 960–1199px, full sidebar 1200px+) | No separate desktop pages to keep in sync |
-| Category colors | 8 fixed colors, one per default category; gray for the rest | Checked with a color-blindness validator on the dark cards; the same color means the same category on every page |
+| Category colors | 8 fixed colors, one per default category; gray for the rest | Chosen so neighbors stay apart for color-blind readers; shown as soft tints on the light theme, with a deeper shade for icons and names; the same color means the same category on every page |
 | "Spent vs. last month" | Same days of last month while a month is still running | Half a month always looks cheaper than a whole one |
 | Pages and URLs | React Router; the month is shared state, not in the URL | Switching pages keeps the month you picked |
 | Icons and font | `lucide-react`, Urbanist (self-hosted via `@fontsource`) | No requests to font or icon CDNs |
@@ -144,10 +144,19 @@ budget_app/
    delete), Budgets (set limits, new categories), a shared month picker.
 2. **Login** (next): replace `get_current_user_id()` in `backend/app/dependencies.py`
    with real auth (argon2 password hashes, server-side sessions in an httpOnly
-   cookie). Everything else already takes `user_id` from there.
-3. **Later**: bank CSV import (worker + dedupe), then the AI: auto-categorization
-   (rules first, LLM for unknown merchants) and a chat agent that calls services
-   and needs confirmation before any change.
+   cookie, rate limiting on login). Everything else already takes `user_id`
+   from there. **Required before a public deploy**: without it, anyone with the
+   URL is the demo user.
+3. **Deploy on AWS**: one EC2 server with Docker Compose and Caddy (HTTPS), like
+   job-tracker. Until login exists, only reachable from the owner's IP.
+4. **AI, the main goal of the project**, using **Amazon Bedrock** as the model
+   provider: auto-categorization (rules first, LLM for unknown merchants) and a
+   chat agent that calls services and needs confirmation before any change.
+   - The server gets Bedrock access through an **IAM role**: no API key in `.env`.
+   - Only `backend/app/agent/llm.py` knows the provider; the tools and the loop
+     are our own code (not Bedrock Agents), so switching providers is one file.
+   - Check which models Bedrock offers in the chosen region first.
+5. **Later**: bank CSV import (worker + dedupe).
 
 ## Testing
 

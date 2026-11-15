@@ -43,7 +43,7 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #a28cf7, #5a43c9);
+  background: linear-gradient(135deg, #8f75f5, #5a3fd4);
   color: var(--ink-on-color);
   font-weight: 700;
   font-size: 15px;
@@ -186,8 +186,8 @@
 }
 
 .chip-outline {
-  border: 1px solid rgba(250, 178, 25, 0.45);
-  color: #f5cf7a;
+  border: 1px solid rgba(168, 109, 0, 0.45);
+  color: var(--warning);
 }
 
 .chip-critical {
@@ -196,7 +196,7 @@
 }
 
 .chip-good {
-  background: rgba(52, 199, 89, 0.16);
+  background: rgba(27, 143, 62, 0.12);
   color: var(--good);
 }
 
@@ -256,7 +256,7 @@
 .button-ghost {
   background: transparent;
   border-style: dashed;
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: rgba(0, 0, 0, 0.18);
   color: var(--text-2);
 }
 
@@ -448,11 +448,12 @@
   height: 132px;
   padding: 14px;
   border-radius: var(--radius-md);
-  background:
-    radial-gradient(circle at 100% 0%, rgba(255, 255, 255, 0.28), transparent 55%),
-    radial-gradient(circle at 0% 100%, rgba(0, 0, 0, 0.12), transparent 60%),
-    var(--cat);
-  color: var(--ink-on-color);
+  /* A soft tint of the category color, with the full color as a stripe on
+     the left: the color says which category, without shouting on white. */
+  background: color-mix(in srgb, var(--cat) 12%, #ffffff);
+  border: 1px solid color-mix(in srgb, var(--cat) 22%, #ffffff);
+  box-shadow: inset 4px 0 0 var(--cat);
+  color: var(--text);
 }
 
 .category-card-add {
@@ -478,6 +479,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: color-mix(in srgb, var(--cat) 70%, #000000);
 }
 
 .category-card-amount {
@@ -493,14 +495,15 @@
   align-self: flex-start;
   padding: 3px 8px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.16);
+  background: color-mix(in srgb, var(--cat) 18%, #ffffff);
+  color: var(--text-2);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
 }
 
 .category-card-note.over {
-  background: var(--ink-on-color);
+  background: var(--critical-track);
   color: var(--critical);
 }
 
@@ -583,8 +586,8 @@ button.row-inner:hover {
   place-items: center;
   flex-shrink: 0;
   border-radius: 50%;
-  background: var(--surface-2);
-  color: var(--cat);
+  background: color-mix(in srgb, var(--cat) 12%, #ffffff);
+  color: color-mix(in srgb, var(--cat) 80%, #000000); /* a deeper shade: readable on white */
 }
 
 .row-text {
@@ -789,9 +792,9 @@ button.row-inner:hover {
   padding: 6px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: rgba(38, 38, 42, 0.86);
+  background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(14px);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
 }
 
 .app-nav-links {
@@ -839,7 +842,7 @@ button.row-inner:hover {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.35);
   animation: fade-in 0.15s ease-out;
 }
 
@@ -1069,7 +1072,7 @@ button.row-inner:hover {
   justify-content: flex-end;
   gap: 28px;
   padding: 24px 24px max(32px, env(safe-area-inset-bottom));
-  background: radial-gradient(120% 70% at 50% 25%, #1f2a29 0%, var(--bg) 70%);
+  background: radial-gradient(120% 70% at 50% 25%, #e3f1ee 0%, var(--bg) 70%);
   overflow: hidden;
 }
 
@@ -1205,7 +1208,8 @@ button.row-inner:hover {
     border: none;
     border-right: 1px solid var(--border);
     border-radius: 0;
-    background: #161618;
+    background: var(--surface-1);
+    box-shadow: 1px 0 0 var(--border);
     box-shadow: none;
     backdrop-filter: none;
   }
@@ -1249,8 +1253,8 @@ button.row-inner:hover {
      (White text on the violet fill would be too faint for a text label.) */
   .app-nav-link.active {
     position: relative;
-    background: rgba(143, 117, 245, 0.16);
-    color: var(--text);
+    background: var(--accent-track);
+    color: var(--accent);
   }
 
   .app-nav-link.active svg {
@@ -1535,7 +1539,7 @@ button.row-inner:hover {
     row-gap: 36px;
     max-width: none; /* the glow spans the whole window; the padding centers a 1180px-wide content area */
     padding: 48px max(56px, calc((100vw - 1180px) / 2));
-    background: radial-gradient(45% 65% at 72% 50%, #1f2a29 0%, var(--bg) 70%);
+    background: radial-gradient(45% 65% at 72% 50%, #e3f1ee 0%, var(--bg) 70%);
   }
 
   .welcome-art {

@@ -1,29 +1,30 @@
 /* Design tokens: every color, radius and font the app uses, in one place.
-   The app is dark only, like the design it follows. */
+   The app is light: white cards on a soft gray page. */
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  --bg: #121214; /* the page */
-  --surface-1: #1c1c1f; /* cards */
-  --surface-2: #26262a; /* things on cards: chips, icon circles, inputs */
-  --surface-3: #313136; /* hover */
-  --border: rgba(255, 255, 255, 0.08);
+  --bg: #f3f3f6; /* the page */
+  --surface-1: #ffffff; /* cards */
+  --surface-2: #efeff3; /* things on cards: chips, icon circles, inputs */
+  --surface-3: #e4e4ea; /* hover */
+  --border: rgba(0, 0, 0, 0.09);
 
-  --text: #f4f4f5;
-  --text-2: #b6b6bd; /* secondary */
-  --text-3: #8b8b93; /* muted: 5:1 on the cards */
-  --ink-on-color: #0b0b0b; /* text on a colored fill (category cards, violet chips) */
+  --text: #16161a;
+  --text-2: #4a4a54; /* secondary */
+  --text-3: #686873; /* muted: 5:1 on white */
+  --ink-on-color: #0b0b0b; /* text on a colored fill (violet chips) */
 
-  --accent: #8f75f5; /* violet: the main action, the current page, the ring */
-  --accent-track: #3a3157; /* a dark step of the same violet */
-  --accent-hover: #a28cf7;
+  --accent: #6c4fe6; /* violet: the main action, the current page, the ring */
+  --accent-track: #e4dcfd; /* a light step of the same violet */
+  --accent-hover: #5a3fd4;
 
-  /* Status: never used as a category color, always with an icon or words */
-  --good: #34c759;
-  --warning: #fab219;
-  --warning-track: #4a3a12;
-  --critical: #ff6b6b;
-  --critical-track: #4d2626;
+  /* Status: never used as a category color, always with an icon or words.
+     Darker than on a dark theme so they stay readable on white. */
+  --good: #1b8f3e;
+  --warning: #a86d00;
+  --warning-track: #fbeccb;
+  --critical: #d23232;
+  --critical-track: #fbdddd;
 
   --radius-xl: 32px;
   --radius-lg: 24px;

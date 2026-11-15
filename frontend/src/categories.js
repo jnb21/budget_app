@@ -1,9 +1,10 @@
 // How each category looks: one color and one icon, the same on every page, so
 // "violet" always means Rent whether it's a card, a bar segment or a list icon.
 //
-// The eight colors are one categorical palette, checked with a color-vision
-// validator against the dark card surface: every hue clears 3:1 contrast,
-// and neighbors stay apart for color-blind readers. Don't add a ninth hue:
+// The eight colors are one categorical palette, chosen so neighbors stay
+// apart for color-blind readers. On the light theme they appear as tints
+// (card backgrounds, icon circles) with a deeper shade for icons and names,
+// so text never sits on the full-strength color. Don't add a ninth hue:
 // anything without a color of its own (Other, Uncategorized, categories you
 // create) shares the neutral gray.
 

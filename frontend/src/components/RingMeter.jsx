@@ -1,7 +1,7 @@
 /**
  * How much of a limit is used, as a ring: one value against one limit (a meter).
  * The fill carries the state: violet under 80%, amber from 80%, red past 100%.
- * The track is a dark step of the same color, so the state reads around the whole ring.
+ * The track is a light step of the same color, so the state reads around the whole ring.
  * The percent is rounded down, like the backend's percent_used.
  */
 export default function RingMeter({ used, limit, label, size = 116, stroke = 14 }) {

@@ -36,10 +36,12 @@ export function centsToInput(cents) {
  * expense/income switch decides the sign.
  */
 export function parseAmount(text) {
-  const cleaned = String(text).replace(/[\s$,]/g, '')
-  const match = /^(\d*)(?:\.(\d{0,2}))?$/.exec(cleaned)
+  const cleaned = String(text).replace(/[\s$]/g, '')
+  // Commas only as thousands separators ("1,234"). "12,50" is refused: it's a
+  // French decimal comma, and dropping the comma would save 100 times the amount.
+  const match = /^(\d{1,3}(?:,\d{3})+|\d*)(?:\.(\d{0,2}))?$/.exec(cleaned)
   if (!match || (match[1] === '' && !match[2])) return null
-  const dollars = Number(match[1] || '0')
+  const dollars = Number(match[1].replaceAll(',', '') || '0')
   const cents = Number((match[2] ?? '').padEnd(2, '0'))
   return dollars * 100 + cents
 }
