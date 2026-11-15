@@ -6,6 +6,7 @@ import LoadState from '../components/LoadState.jsx'
 import Money from '../components/Money.jsx'
 import MonthPicker from '../components/MonthPicker.jsx'
 import RingMeter from '../components/RingMeter.jsx'
+import SpendingBar from '../components/SpendingBar.jsx'
 import TransactionRow from '../components/TransactionRow.jsx'
 import { formatMoneyShort, heroFigureClass } from '../money.js'
 import { useMonth } from '../monthContext.js'
@@ -47,9 +48,10 @@ function DashboardBody({ dashboard, transactions, month }) {
   const income = incomeSources(transactions)
   const recent = transactions.filter((t) => t.amount_cents < 0).slice(0, RECENT_COUNT)
 
+  // One column on phones; on desktop, App.css places each section in a grid area.
   return (
-    <>
-      <section className="card hero" aria-labelledby="planned-heading">
+    <div className="dashboard-grid">
+      <section className="card hero area-hero" aria-labelledby="planned-heading">
         <div className="hero-text">
           <h2 id="planned-heading" className="eyebrow">
             <b>Planned</b> expenses
@@ -60,7 +62,7 @@ function DashboardBody({ dashboard, transactions, month }) {
         <RingMeter used={spent} limit={budgeted} label="spent" />
       </section>
 
-      <section aria-labelledby="categories-heading">
+      <section className="area-cats" aria-labelledby="categories-heading">
         <h2 id="categories-heading" className="sr-only">
           Spending by category
         </h2>
@@ -68,6 +70,9 @@ function DashboardBody({ dashboard, transactions, month }) {
           <li>
             <Link to="/budgets" className="category-card category-card-add" aria-label="Set budgets">
               <Plus size={24} aria-hidden="true" />
+              <span className="category-card-add-label desktop-only" aria-hidden="true">
+                Set budgets
+              </span>
             </Link>
           </li>
           {categories.map((line) => (
@@ -76,7 +81,7 @@ function DashboardBody({ dashboard, transactions, month }) {
         </ul>
       </section>
 
-      <section aria-labelledby="income-heading">
+      <section className="area-income" aria-labelledby="income-heading">
         <h2 id="income-heading" className="section-title">
           <b>My</b> income
         </h2>
@@ -100,7 +105,7 @@ function DashboardBody({ dashboard, transactions, month }) {
         )}
       </section>
 
-      <section aria-labelledby="recent-heading">
+      <section className="area-recent desktop-card" aria-labelledby="recent-heading">
         <div className="section-header">
           <h2 id="recent-heading" className="section-title">
             <b>Spending</b> {monthName(month)}
@@ -119,7 +124,18 @@ function DashboardBody({ dashboard, transactions, month }) {
           </ul>
         )}
       </section>
-    </>
+
+      {/* Desktop only: the space beside "Spending" shows where the money went. */}
+      <section className="card area-split desktop-only" aria-labelledby="split-heading">
+        <div className="section-header">
+          <h2 id="split-heading" className="section-title">
+            <b>Where</b> it went
+          </h2>
+          <Money cents={spent} className="section-amount" />
+        </div>
+        {spent > 0 ? <SpendingBar lines={categories} /> : <p className="empty">Nothing spent yet.</p>}
+      </section>
+    </div>
   )
 }
 

@@ -27,16 +27,16 @@ test('after the welcome screen was seen once, "/" goes straight to the dashboard
   expect(screen.getByRole('heading', { name: 'Monthly budget' })).toBeTruthy()
 })
 
-test('the bottom nav opens each page and marks the current one', async () => {
+test('the main nav opens each page and marks the current one', async () => {
   fakeApi(novemberRoutes())
   renderApp('/dashboard')
   const nav = screen.getByRole('navigation', { name: 'Main' })
-  expect(nav.querySelector('[aria-current="page"]').getAttribute('aria-label')).toBe('Dashboard')
+  expect(nav.querySelector('[aria-current="page"]').textContent).toBe('Dashboard')
 
   fireEvent.click(screen.getByRole('link', { name: 'Budgets' }))
 
   expect(await screen.findByRole('heading', { name: 'Budgets', level: 1 })).toBeTruthy()
-  expect(nav.querySelector('[aria-current="page"]').getAttribute('aria-label')).toBe('Budgets')
+  expect(nav.querySelector('[aria-current="page"]').textContent).toBe('Budgets')
 })
 
 test('the month picked on one page stays picked on the next', async () => {
@@ -48,6 +48,15 @@ test('the month picked on one page stays picked on the next', async () => {
 
   expect(await screen.findByRole('heading', { name: 'Budgets', level: 1 })).toBeTruthy()
   expect(fetch).toHaveBeenCalledWith('/api/budgets?month=2026-10', { method: 'GET' })
+})
+
+test('the backend status page is one click away in the nav', async () => {
+  fakeApi({ ...novemberRoutes(), 'GET /health': { status: 'ok', database: 'ok' } })
+  renderApp('/dashboard')
+
+  fireEvent.click(screen.getByRole('link', { name: 'Backend status' }))
+
+  expect(await screen.findByText('Backend and database are up.')).toBeTruthy()
 })
 
 test('an unknown URL goes back to the start', () => {

@@ -8,6 +8,7 @@ import CategoryIcon from '../components/CategoryIcon.jsx'
 import LoadState from '../components/LoadState.jsx'
 import Money from '../components/Money.jsx'
 import MonthPicker from '../components/MonthPicker.jsx'
+import RingMeter from '../components/RingMeter.jsx'
 import Sheet from '../components/Sheet.jsx'
 import { formatMoney, formatMoneyShort, heroFigureClass } from '../money.js'
 import { useMonth } from '../monthContext.js'
@@ -59,44 +60,50 @@ export default function Budgets() {
 function BudgetsBody({ budgeted, unbudgeted, totalLimit, totalSpentBudgeted, month, onEdit, onNewCategory }) {
   return (
     <>
-      <section className="card hero-compact" aria-labelledby="planned-total">
-        <h2 id="planned-total" className="eyebrow">
-          <b>Planned</b> for {monthName(month)}
-        </h2>
-        <Money cents={totalLimit} className={heroFigureClass(totalLimit)} />
-        <p className="muted">
-          {budgeted.length === 0
-            ? 'No limits yet. Pick a category below to set one.'
-            : `${formatMoney(totalSpentBudgeted)} spent across ${budgeted.length} ${budgeted.length === 1 ? 'category' : 'categories'} with a limit`}
-        </p>
+      <section className="card hero hero-compact" aria-labelledby="planned-total">
+        <div className="hero-text">
+          <h2 id="planned-total" className="eyebrow">
+            <b>Planned</b> for {monthName(month)}
+          </h2>
+          <Money cents={totalLimit} className={heroFigureClass(totalLimit)} />
+          <p className="muted">
+            {budgeted.length === 0
+              ? 'No limits yet. Pick a category below to set one.'
+              : `${formatMoney(totalSpentBudgeted)} spent across ${budgeted.length} ${budgeted.length === 1 ? 'category' : 'categories'} with a limit`}
+          </p>
+        </div>
+        <RingMeter used={totalSpentBudgeted} limit={totalLimit} label="spent" />
       </section>
 
-      {budgeted.length > 0 && (
-        <section aria-labelledby="with-limit">
-          <h2 id="with-limit" className="section-title">
-            <b>With</b> a limit
+      {/* Phones: one column. Desktop: the two lists side by side. */}
+      <div className="budget-columns">
+        {budgeted.length > 0 && (
+          <section className="desktop-card" aria-labelledby="with-limit">
+            <h2 id="with-limit" className="section-title">
+              <b>With</b> a limit
+            </h2>
+            <ul className="list">
+              {budgeted.map((row) => (
+                <BudgetRow key={row.category.id} row={row} onEdit={onEdit} />
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <section className="desktop-card" aria-labelledby="without-limit">
+          <h2 id="without-limit" className="section-title">
+            <b>No</b> limit yet
           </h2>
           <ul className="list">
-            {budgeted.map((row) => (
+            {unbudgeted.map((row) => (
               <BudgetRow key={row.category.id} row={row} onEdit={onEdit} />
             ))}
           </ul>
+          <button type="button" className="button button-ghost add-category" onClick={onNewCategory}>
+            <Plus size={18} aria-hidden="true" /> New category
+          </button>
         </section>
-      )}
-
-      <section aria-labelledby="without-limit">
-        <h2 id="without-limit" className="section-title">
-          <b>No</b> limit yet
-        </h2>
-        <ul className="list">
-          {unbudgeted.map((row) => (
-            <BudgetRow key={row.category.id} row={row} onEdit={onEdit} />
-          ))}
-        </ul>
-        <button type="button" className="button button-ghost add-category" onClick={onNewCategory}>
-          <Plus size={18} aria-hidden="true" /> New category
-        </button>
-      </section>
+      </div>
     </>
   )
 }

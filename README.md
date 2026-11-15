@@ -95,7 +95,7 @@ budget_app/
 │       ├── months.js         "2026-11" helpers, local dates
 │       ├── categories.js     each category's color and icon
 │       ├── index.css         design tokens (colors, radii, font)
-│       ├── App.css           component styles
+│       ├── App.css           component styles; the desktop layout is at the end
 │       └── test/             fake fetch, sample API answers, test setup
 ├── backend/
 │   ├── app/
@@ -131,7 +131,8 @@ budget_app/
 | Users | `user_id` on every table, every query filtered by it | Isolation; 404 (not 403) for other users' rows so nothing leaks |
 | Login | Not yet: `get_current_user_id()` returns a demo user | Build the app first; real login replaces only that function |
 | Refunds | Dashboard uses net per category | A $25 refund lowers that category's spending |
-| Look | Dark, phone-width column (centered on a laptop), floating bottom nav | Follows the Dribbble budget-app shot we picked |
+| Look | Dark; phones get a floating bottom nav, desktops (960px+) a sidebar and two-column pages | Follows the Dribbble budget-app shot we picked |
+| Responsive layout | One set of components; CSS decides the layout (phone < 960px, icon rail 960–1199px, full sidebar 1200px+) | No separate desktop pages to keep in sync |
 | Category colors | 8 fixed colors, one per default category; gray for the rest | Checked with a color-blindness validator on the dark cards; the same color means the same category on every page |
 | "Spent vs. last month" | Same days of last month while a month is still running | Half a month always looks cheaper than a whole one |
 | Pages and URLs | React Router; the month is shared state, not in the URL | Switching pages keeps the month you picked |

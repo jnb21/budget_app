@@ -59,65 +59,70 @@ export default function Transactions() {
 function TransactionsBody({ dashboard, transactions, previousTransactions, today, month, onSelect, onAdd }) {
   const days = groupByDay(transactions)
 
+  // Phones: one column. Desktop: the list on the left, the summary in a sticky column on the right.
   return (
-    <>
-      <section className="card balance" aria-labelledby="net-heading">
-        <div className="balance-header">
-          <h2 id="net-heading" className="eyebrow">
-            Net for {monthName(month)}
-          </h2>
-          <button type="button" className="icon-button icon-button-accent" onClick={onAdd} aria-label="New transaction" title="New transaction">
-            <Plus size={20} aria-hidden="true" />
-          </button>
-        </div>
-        <Money cents={dashboard.net_cents} className={heroFigureClass(dashboard.net_cents)} />
-        <SpendingChange month={month} transactions={transactions} previousTransactions={previousTransactions} today={today} />
-        <dl className="balance-split">
-          <div>
-            <dt>Money in</dt>
-            <dd>
-              <Money cents={dashboard.income_cents} plus className="received" />
-            </dd>
+    <div className="split-layout">
+      <div className="split-side">
+        <section className="card balance" aria-labelledby="net-heading">
+          <div className="balance-header">
+            <h2 id="net-heading" className="eyebrow">
+              Net for {monthName(month)}
+            </h2>
+            <button type="button" className="icon-button icon-button-accent" onClick={onAdd} aria-label="New transaction" title="New transaction">
+              <Plus size={20} aria-hidden="true" />
+            </button>
           </div>
-          <div>
-            <dt>Money out</dt>
-            <dd>
-              <Money cents={dashboard.spent_cents} />
-            </dd>
+          <Money cents={dashboard.net_cents} className={heroFigureClass(dashboard.net_cents)} />
+          <SpendingChange month={month} transactions={transactions} previousTransactions={previousTransactions} today={today} />
+          <dl className="balance-split">
+            <div>
+              <dt>Money in</dt>
+              <dd>
+                <Money cents={dashboard.income_cents} plus className="received" />
+              </dd>
+            </div>
+            <div>
+              <dt>Money out</dt>
+              <dd>
+                <Money cents={dashboard.spent_cents} />
+              </dd>
+            </div>
+          </dl>
+        </section>
+
+        <section className="card" aria-labelledby="split-heading">
+          <div className="section-header">
+            <h2 id="split-heading" className="section-title">
+              <b>Spending</b> {monthName(month)}
+            </h2>
+            <Money cents={dashboard.spent_cents} className="section-amount" />
           </div>
-        </dl>
-      </section>
+          {dashboard.spent_cents > 0 ? <SpendingBar lines={dashboard.categories} /> : <p className="empty">Nothing spent yet.</p>}
+        </section>
+      </div>
 
-      <section className="card" aria-labelledby="split-heading">
-        <div className="section-header">
-          <h2 id="split-heading" className="section-title">
-            <b>Spending</b> {monthName(month)}
-          </h2>
-          <Money cents={dashboard.spent_cents} className="section-amount" />
-        </div>
-        {dashboard.spent_cents > 0 ? <SpendingBar lines={dashboard.categories} /> : <p className="empty">Nothing spent yet.</p>}
-      </section>
-
-      {days.length === 0 ? (
-        <div className="card empty-card">
-          <p>No transactions in {monthName(month)} yet.</p>
-          <button type="button" className="button button-primary" onClick={onAdd}>
-            Add a transaction
-          </button>
-        </div>
-      ) : (
-        days.map(([day, items]) => (
-          <section key={day} aria-label={formatDay(day)}>
-            <h2 className="day-heading">{formatDay(day)}</h2>
-            <ul className="list">
-              {items.map((t) => (
-                <TransactionRow key={t.id} transaction={t} onSelect={onSelect} />
-              ))}
-            </ul>
-          </section>
-        ))
-      )}
-    </>
+      <div className="split-main">
+        {days.length === 0 ? (
+          <div className="card empty-card">
+            <p>No transactions in {monthName(month)} yet.</p>
+            <button type="button" className="button button-primary" onClick={onAdd}>
+              Add a transaction
+            </button>
+          </div>
+        ) : (
+          days.map(([day, items]) => (
+            <section key={day} aria-label={formatDay(day)}>
+              <h2 className="day-heading">{formatDay(day)}</h2>
+              <ul className="list">
+                {items.map((t) => (
+                  <TransactionRow key={t.id} transaction={t} onSelect={onSelect} />
+                ))}
+              </ul>
+            </section>
+          ))
+        )}
+      </div>
+    </div>
   )
 }
 

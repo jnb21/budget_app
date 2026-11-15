@@ -1,5 +1,5 @@
 import { Navigate, Outlet, Route, Routes } from 'react-router'
-import BottomNav from './components/BottomNav.jsx'
+import AppNav from './components/AppNav.jsx'
 import Budgets from './pages/Budgets.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Status from './pages/Status.jsx'
@@ -25,12 +25,12 @@ export default function App() {
   )
 }
 
-/** Every page but the welcome screen: the page, then the floating nav. */
+/** Every page but the welcome screen: the nav (bottom pill on phones, sidebar on desktop), then the page. */
 function Shell() {
   return (
     <div className="shell">
+      <AppNav />
       <Outlet />
-      <BottomNav />
     </div>
   )
 }

@@ -64,6 +64,18 @@
   flex-shrink: 0;
 }
 
+/* Layout wrappers: one column on phones; the desktop section at the end of
+   this file turns them into grids. */
+.dashboard-grid,
+.split-layout,
+.split-side,
+.split-main,
+.budget-columns {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
 /* ---------- Cards, sections, text ---------- */
 
 .card {
@@ -762,16 +774,18 @@ button.row-inner:hover {
   width: 100%;
 }
 
-/* ---------- Bottom nav ---------- */
+/* ---------- Navigation (phone: floating pill at the bottom) ---------- */
 
-.bottom-nav {
+.desktop-only {
+  display: none;
+}
+
+.app-nav {
   position: fixed;
   left: 50%;
   bottom: max(20px, env(safe-area-inset-bottom));
   transform: translateX(-50%);
   z-index: 10;
-  display: flex;
-  gap: 6px;
   padding: 6px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -780,24 +794,40 @@ button.row-inner:hover {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
-.bottom-nav-link {
+.app-nav-links {
+  display: flex;
+  gap: 6px;
+}
+
+.app-nav-link {
   display: grid;
   place-items: center;
   width: 56px;
   height: 56px;
   border-radius: 50%;
   color: var(--text-2);
+  text-decoration: none;
   transition: background 0.2s;
 }
 
-.bottom-nav-link:hover {
+.app-nav-link:hover {
   color: var(--text);
   background: var(--surface-3);
 }
 
-.bottom-nav-link.active {
+.app-nav-link.active {
   background: var(--accent);
   color: #ffffff;
+}
+
+/* On phones the labels are for screen readers only (same as .sr-only) */
+.app-nav-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
 }
 
 /* ---------- Sheet (dialog) and forms ---------- */
@@ -1137,4 +1167,493 @@ button.row-inner:hover {
   border-radius: 50%;
   background: var(--surface-2);
   color: var(--text-2);
+}
+
+/* =======================================================================
+   Desktop: from 960px, a sidebar replaces the bottom pill and pages get
+   two columns. 960–1199px: the sidebar is an icon rail, to leave the pages
+   room. 1200px and up: the full sidebar with labels.
+   ======================================================================= */
+
+@media (min-width: 960px) {
+  :root {
+    --sidebar-width: 88px;
+  }
+
+  .desktop-only {
+    display: revert;
+  }
+
+  /* ----- Sidebar (icon rail) ----- */
+
+  .shell {
+    max-width: none;
+    padding-left: var(--sidebar-width);
+  }
+
+  .app-nav {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    transform: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+    width: var(--sidebar-width);
+    padding: 24px 12px 20px;
+    border: none;
+    border-right: 1px solid var(--border);
+    border-radius: 0;
+    background: #161618;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .app-nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .app-nav-brand-name,
+  .app-nav-user-text {
+    display: none;
+  }
+
+  .app-nav-logo {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    background: var(--accent);
+    color: var(--ink-on-color);
+  }
+
+  .app-nav-links {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .app-nav-link {
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+  }
+
+  /* The current page: a violet wash, a violet icon, and a bar on the left.
+     (White text on the violet fill would be too faint for a text label.) */
+  .app-nav-link.active {
+    position: relative;
+    background: rgba(143, 117, 245, 0.16);
+    color: var(--text);
+  }
+
+  .app-nav-link.active svg {
+    color: var(--accent);
+  }
+
+  .app-nav-link.active::before {
+    content: '';
+    position: absolute;
+    left: -12px;
+    top: 12px;
+    bottom: 12px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--accent);
+  }
+
+  .app-nav-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    margin-top: auto;
+  }
+
+  .app-nav-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 44px;
+    height: 40px;
+    border-radius: 12px;
+    color: var(--text-3);
+    font-size: 14px;
+    text-decoration: none;
+  }
+
+  .app-nav-status:hover,
+  .app-nav-status.active {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  .app-nav-user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .avatar-small {
+    width: 38px;
+    height: 38px;
+    font-size: 13px;
+  }
+
+  .app-nav-user-name {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .app-nav-user-note {
+    display: block;
+    font-size: 12px;
+    color: var(--text-3);
+  }
+
+  /* ----- Pages ----- */
+
+  .page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 32px 40px 56px;
+    gap: 28px;
+  }
+
+  .page-title {
+    font-size: 32px;
+  }
+
+  .greeting-hello {
+    font-size: 14px;
+  }
+
+  .greeting-title {
+    font-size: 28px;
+    font-weight: 600;
+  }
+
+  .greeting .avatar {
+    display: none; /* the sidebar already shows who you are */
+  }
+
+  .desktop-card {
+    padding: 20px 20px 16px;
+    border-radius: var(--radius-lg);
+    background: var(--surface-1);
+  }
+
+  .desktop-card button.row-inner:hover,
+  .split-main button.row-inner:hover {
+    background: var(--surface-2);
+  }
+
+  .hero {
+    padding: 28px 32px;
+  }
+
+  .hero .ring {
+    --ring-size: 128px !important;
+  }
+
+  .ring figcaption strong {
+    font-size: 24px;
+  }
+
+  /* ----- Dashboard: hero + income / categories / recent + split ----- */
+
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+    grid-template-areas:
+      'hero income'
+      'cats cats'
+      'recent split';
+    gap: 24px;
+  }
+
+  .area-hero {
+    grid-area: hero;
+  }
+
+  .area-income {
+    grid-area: income;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    border-radius: var(--radius-xl);
+    background: var(--surface-1);
+  }
+
+  .area-cats {
+    grid-area: cats;
+  }
+
+  .area-recent {
+    grid-area: recent;
+  }
+
+  .area-split {
+    grid-area: split;
+    align-self: start;
+  }
+
+  .area-income .income-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .area-income .income-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 14px;
+    row-gap: 0;
+    align-items: center;
+    padding: 12px 14px;
+    background: var(--surface-2);
+  }
+
+  .area-income .income-icon {
+    grid-row: span 2;
+    margin: 0;
+    background: var(--surface-3);
+  }
+
+  .area-income .income-amount {
+    font-size: 18px;
+  }
+
+  /* Category cards: a wrapping grid instead of a side-scroller */
+  .carousel {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 14px;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+  }
+
+  .category-card {
+    width: auto;
+    height: 148px;
+    padding: 16px;
+  }
+
+  .category-card-add {
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    height: 148px;
+    color: var(--text-2);
+  }
+
+  .category-card-add-label {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .category-card-amount {
+    font-size: 24px;
+  }
+
+  /* ----- Transactions: list left, summary right (sticky) ----- */
+
+  .split-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    align-items: start;
+  }
+
+  .split-side {
+    grid-column: 2;
+    grid-row: 1;
+    position: sticky;
+    top: 32px;
+  }
+
+  .split-main {
+    grid-column: 1;
+    grid-row: 1;
+    gap: 16px;
+    padding: 16px 16px 20px;
+    border-radius: var(--radius-lg);
+    background: var(--surface-1);
+  }
+
+  .split-main .day-heading {
+    margin-top: 6px;
+  }
+
+  .split-main .empty-card {
+    padding: 8px;
+  }
+
+  .balance .hero-figure {
+    font-size: 44px;
+  }
+
+  /* ----- Budgets: the two lists side by side ----- */
+
+  .budget-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    align-items: start;
+  }
+
+  /* ----- Forms: a centered dialog instead of a bottom sheet ----- */
+
+  .sheet-backdrop {
+    align-items: center;
+    padding: 24px;
+  }
+
+  .sheet {
+    max-width: 500px;
+    padding: 28px;
+    border-radius: var(--radius-xl);
+    animation: pop-in 0.18s ease-out;
+  }
+
+  /* ----- Welcome: text left, illustration right ----- */
+
+  .welcome {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    grid-template-areas:
+      'text art'
+      'button art';
+    align-content: center;
+    column-gap: 64px;
+    row-gap: 36px;
+    max-width: none; /* the glow spans the whole window; the padding centers a 1180px-wide content area */
+    padding: 48px max(56px, calc((100vw - 1180px) / 2));
+    background: radial-gradient(45% 65% at 72% 50%, #1f2a29 0%, var(--bg) 70%);
+  }
+
+  .welcome-art {
+    grid-area: art;
+    align-self: center;
+    margin: 0;
+  }
+
+  .welcome-text {
+    grid-area: text;
+    align-self: end;
+  }
+
+  .welcome-text h1 {
+    font-size: clamp(44px, 4.6vw, 60px);
+    line-height: 1.12;
+  }
+
+  .welcome-text p {
+    max-width: 460px;
+    font-size: 18px;
+  }
+
+  .start-button {
+    grid-area: button;
+    align-self: start;
+    max-width: 400px;
+  }
+}
+
+@keyframes pop-in {
+  from {
+    transform: scale(0.97);
+    opacity: 0;
+  }
+}
+
+/* ----- 1200px and up: the full sidebar, with labels; a bigger hero ----- */
+
+@media (min-width: 1200px) {
+  :root {
+    --sidebar-width: 248px;
+  }
+
+  .app-nav {
+    align-items: stretch;
+    padding: 28px 16px 20px;
+  }
+
+  .app-nav-brand {
+    padding: 0 8px;
+  }
+
+  .app-nav-brand-name,
+  .app-nav-user-text {
+    display: block;
+  }
+
+  .app-nav-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: auto;
+    height: 48px;
+    padding: 0 14px;
+    border-radius: 14px;
+    font-weight: 500;
+  }
+
+  .app-nav-link.active::before {
+    left: -16px;
+  }
+
+  .app-nav-label {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+  }
+
+  .app-nav-footer {
+    align-items: stretch;
+  }
+
+  .app-nav-status {
+    justify-content: flex-start;
+    width: auto;
+    padding: 0 14px;
+  }
+
+  .app-nav-user {
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+  }
+
+  .hero-figure {
+    font-size: 56px;
+  }
+
+  .hero-figure-long {
+    font-size: 46px;
+  }
+
+  .hero .ring {
+    --ring-size: 148px !important;
+  }
+
+  .ring figcaption strong {
+    font-size: 28px;
+  }
+
+  .split-layout {
+    grid-template-columns: minmax(0, 1fr) 380px;
+  }
+
+  .page {
+    max-width: 1360px;
+  }
 }
