@@ -2,10 +2,10 @@
 
 A simple budgeting app with an AI agent, built as a learning project.
 
-> **Status:** the backend MVP is built (categories, transactions, budgets,
-> dashboard) and tested; there is no login yet, every request acts as a fake
-> **demo user**. The frontend only has the backend-status page so far.
-> **Next:** the frontend pages (see [Next steps](#next-steps)).
+> **Status:** the backend MVP (categories, transactions, budgets, dashboard)
+> and the frontend pages (welcome, dashboard, transactions, budgets) are built
+> and tested; there is no login yet, every request acts as a fake **demo user**.
+> **Next:** login (see [Next steps](#next-steps)).
 
 ## Running locally
 
@@ -84,7 +84,19 @@ Each layer only calls the one below it:
 
 ```
 budget_app/
-├── frontend/                 React + Vite: screens, calls the API
+├── frontend/
+│   └── src/
+│       ├── main.jsx          starts the app: router + shared month
+│       ├── App.jsx           page URLs (/welcome, /dashboard, /transactions, /budgets, /status)
+│       ├── api.js            every call to the backend; errors become readable messages
+│       ├── pages/            one file per page, each with its .test.jsx
+│       ├── components/       shared pieces: Money, MonthPicker, Sheet (modal), forms, charts
+│       ├── money.js          cents <-> "$1,475.00"; parses what the user types
+│       ├── months.js         "2026-11" helpers, local dates
+│       ├── categories.js     each category's color and icon
+│       ├── index.css         design tokens (colors, radii, font)
+│       ├── App.css           component styles
+│       └── test/             fake fetch, sample API answers, test setup
 ├── backend/
 │   ├── app/
 │   │   ├── main.py           creates the FastAPI app, plugs in routers, maps errors to HTTP codes
@@ -119,14 +131,17 @@ budget_app/
 | Users | `user_id` on every table, every query filtered by it | Isolation; 404 (not 403) for other users' rows so nothing leaks |
 | Login | Not yet: `get_current_user_id()` returns a demo user | Build the app first; real login replaces only that function |
 | Refunds | Dashboard uses net per category | A $25 refund lowers that category's spending |
+| Look | Dark, phone-width column (centered on a laptop), floating bottom nav | Follows the Dribbble budget-app shot we picked |
+| Category colors | 8 fixed colors, one per default category; gray for the rest | Checked with a color-blindness validator on the dark cards; the same color means the same category on every page |
+| "Spent vs. last month" | Same days of last month while a month is still running | Half a month always looks cheaper than a whole one |
+| Pages and URLs | React Router; the month is shared state, not in the URL | Switching pages keeps the month you picked |
+| Icons and font | `lucide-react`, Urbanist (self-hosted via `@fontsource`) | No requests to font or icon CDNs |
 
 ## Next steps
 
-1. **Frontend pages** (next): Dashboard (spending vs budget per category),
-   Transactions (list by month; add, edit, delete), Budgets (set limits);
-   a shared month picker; React Router for page URLs; component tests with a
-   fake `fetch`, like `src/App.test.jsx`.
-2. **Login**: replace `get_current_user_id()` in `backend/app/dependencies.py`
+1. ~~**Frontend pages**~~: done. Welcome, Dashboard, Transactions (add, edit,
+   delete), Budgets (set limits, new categories), a shared month picker.
+2. **Login** (next): replace `get_current_user_id()` in `backend/app/dependencies.py`
    with real auth (argon2 password hashes, server-side sessions in an httpOnly
    cookie). Everything else already takes `user_id` from there.
 3. **Later**: bank CSV import (worker + dedupe), then the AI: auto-categorization
@@ -146,7 +161,8 @@ kind of test it is, and how to read it. Every test follows **Arrange → Act →
 | Full-stack tests (`TestClient` + real DB) | `main.py` | Layers not wired together, startup/shutdown | Yes |
 | Architecture tests (read the source) | agent | `agent/` importing repositories or the DB | No |
 | Agent tests (fake services, fake LLM) | agent | Wrong tool calls, endless loops | No, and no API cost |
-| Component tests (Vitest, fake `fetch`) | frontend | A page state shown wrong, a button not working | No backend |
+| Component tests (Vitest, fake `fetch`) | frontend | A page state shown wrong, a button not working, the wrong request sent | No backend |
+| Unit tests (Vitest) | frontend helpers | Money/date formatting, amounts parsed wrong | No |
 
 Most tests are service unit tests (fast, where the rules live); fewer
 integration and full-stack tests. Commands are in [Tests](#tests).

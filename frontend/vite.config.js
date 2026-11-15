@@ -18,5 +18,6 @@ export default defineConfig({
   test: {
     // Tests run in Node; jsdom gives them a pretend browser page (document, window).
     environment: 'jsdom',
+    setupFiles: ['./src/test/setup.js'], // cleanup after each test
   },
 })

@@ -1,23 +1,97 @@
+/* Design tokens: every color, radius and font the app uses, in one place.
+   The app is dark only, like the design it follows. */
 :root {
-  --text: #1f2328;
-  --background: #ffffff;
-  --surface: #f6f8fa;
-  --border: #d0d7de;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  line-height: 1.5;
+  color-scheme: dark;
+
+  --bg: #121214; /* the page */
+  --surface-1: #1c1c1f; /* cards */
+  --surface-2: #26262a; /* things on cards: chips, icon circles, inputs */
+  --surface-3: #313136; /* hover */
+  --border: rgba(255, 255, 255, 0.08);
+
+  --text: #f4f4f5;
+  --text-2: #b6b6bd; /* secondary */
+  --text-3: #8b8b93; /* muted: 5:1 on the cards */
+  --ink-on-color: #0b0b0b; /* text on a colored fill (category cards, violet chips) */
+
+  --accent: #8f75f5; /* violet: the main action, the current page, the ring */
+  --accent-track: #3a3157; /* a dark step of the same violet */
+  --accent-hover: #a28cf7;
+
+  /* Status: never used as a category color, always with an icon or words */
+  --good: #34c759;
+  --warning: #fab219;
+  --warning-track: #4a3a12;
+  --critical: #ff6b6b;
+  --critical-track: #4d2626;
+
+  --radius-xl: 32px;
+  --radius-lg: 24px;
+  --radius-md: 18px;
+  --radius-sm: 12px;
+
+  --font: 'Urbanist Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.45;
   color: var(--text);
-  background: var(--background);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #e6edf3;
-    --background: #0d1117;
-    --surface: #161b22;
-    --border: #30363d;
-  }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  min-height: 100dvh;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Visible to screen readers only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
