@@ -1,0 +1,36 @@
+main {
+  max-width: 32rem;
+  margin: 4rem auto;
+  padding: 0 1rem;
+}
+
+.status {
+  border: 1px solid var(--border);
+  border-left: 6px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+
+.status h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.status-ok { border-left-color: #2e9e5b; }
+.status-degraded { border-left-color: #d99a1e; }
+.status-unreachable { border-left-color: #d64545; }
+
+button {
+  font: inherit;
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

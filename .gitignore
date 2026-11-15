@@ -1,0 +1,17 @@
+# Secrets and local settings
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Node / frontend
+node_modules/
+dist/
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
