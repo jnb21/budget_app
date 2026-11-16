@@ -1,10 +1,12 @@
-import { Activity, ArrowLeftRight, ChartPie, Wallet } from 'lucide-react'
+import { Activity, ArrowLeftRight, ChartPie, LogOut, UserRound, Wallet } from 'lucide-react'
 import { NavLink } from 'react-router'
+import { initials, useAuth } from '../authContext.js'
 
 const LINKS = [
   { to: '/dashboard', label: 'Dashboard', Icon: ChartPie },
   { to: '/transactions', label: 'Transactions', Icon: ArrowLeftRight },
   { to: '/budgets', label: 'Budgets', Icon: Wallet },
+  { to: '/account', label: 'Account', Icon: UserRound },
 ]
 
 /**
@@ -14,6 +16,7 @@ const LINKS = [
  *   (from 960px an icon rail, from 1200px with labels)
  */
 export default function AppNav() {
+  const auth = useAuth()
   return (
     <nav className="app-nav" aria-label="Main">
       <div className="app-nav-brand desktop-only">
@@ -39,12 +42,15 @@ export default function AppNav() {
         </NavLink>
         <div className="app-nav-user">
           <span className="avatar avatar-small" aria-hidden="true">
-            DU
+            {initials(auth.user.email)}
           </span>
           <span className="app-nav-user-text">
-            <span className="app-nav-user-name">Demo user</span>
-            <span className="app-nav-user-note">No login yet</span>
+            <span className="app-nav-user-name">{auth.user.email}</span>
           </span>
+          <button type="button" className="icon-button app-nav-logout" onClick={auth.logOut}
+                  aria-label="Log out" title="Log out">
+            <LogOut size={16} aria-hidden="true" />
+          </button>
         </div>
       </div>
     </nav>

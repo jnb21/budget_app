@@ -1,6 +1,7 @@
 import { Banknote, CircleAlert, DollarSign, PiggyBank, Plus } from 'lucide-react'
 import { Link } from 'react-router'
 import { getDashboard, getTransactions } from '../api.js'
+import { initials, useAuth } from '../authContext.js'
 import { categoryStyle, INCOME_CATEGORY } from '../categories.js'
 import LoadState from '../components/LoadState.jsx'
 import Money from '../components/Money.jsx'
@@ -18,6 +19,7 @@ const INCOME_ICONS = [DollarSign, Banknote, PiggyBank]
 
 export default function Dashboard() {
   const { month } = useMonth()
+  const { user } = useAuth()
   const { status, data, error, reload } = useLoad(
     () => Promise.all([getDashboard(month), getTransactions(month)]).then(([dashboard, transactions]) => ({ dashboard, transactions })),
     month,
@@ -28,7 +30,7 @@ export default function Dashboard() {
       <header className="page-header">
         <div className="greeting">
           <span className="avatar" aria-hidden="true">
-            DU
+            {initials(user.email)}
           </span>
           <div>
             <p className="greeting-hello">Hi there!</p>

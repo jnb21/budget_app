@@ -124,3 +124,35 @@ def test_budget_month_is_stored_as_its_first_day():
     BudgetService(budgets, FakeCategoryRepository()).set(ALICE, 1, date(2026, 11, 17), 10_000)
 
     assert budgets.saved == [(ALICE, 1, date(2026, 11, 1), 10_000)]
+
+
+def test_renaming_a_category_cleans_the_name():
+    repo = FakeCategoryRepository(owned={50: ("Pets", ALICE)})
+
+    renamed = CategoryService(repo).rename(ALICE, 50, "  Pet   care ")
+
+    assert renamed["name"] == "Pet care"
+
+
+def test_a_category_can_be_renamed_to_a_new_case_of_its_own_name():
+    repo = FakeCategoryRepository(owned={50: ("Pets", ALICE)})
+
+    assert CategoryService(repo).rename(ALICE, 50, "PETS")["name"] == "PETS"
+
+
+@pytest.mark.parametrize("action", ["rename", "delete"])
+def test_defaults_cannot_be_renamed_or_deleted(action):
+    service = CategoryService(FakeCategoryRepository())
+    args = (ALICE, 1, "Food") if action == "rename" else (ALICE, 1)
+
+    with pytest.raises(InvalidInputError, match="default"):
+        getattr(service, action)(*args)
+
+
+@pytest.mark.parametrize("action", ["rename", "delete"])
+def test_someone_elses_category_is_not_found(action):
+    service = CategoryService(FakeCategoryRepository(owned={50: ("Pets", BOB)}))
+    args = (ALICE, 50, "Mine") if action == "rename" else (ALICE, 50)
+
+    with pytest.raises(NotFoundError):
+        getattr(service, action)(*args)

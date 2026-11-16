@@ -2,6 +2,9 @@
 
 Run it with:  python -m app.seed
 
+LOCAL DEVELOPMENT ONLY: it gives the demo user a known password, so never run
+it against a database that real people use.
+
 It REPLACES the demo user's transactions and budgets each time (and touches
 no other user), so running it twice gives the same result. The numbers come
 from a fixed random seed: the same "today" always produces the same data.
@@ -11,9 +14,13 @@ import random
 import sys
 from datetime import date
 
+from argon2 import PasswordHasher
+
 from app import db
 from app.config import get_settings
 from app.dependencies import DEMO_USER_EMAIL
+
+DEMO_PASSWORD = "demo-password"  # local fake data only
 from app.months import month_bounds
 
 # category -> (transactions per month, smallest $, largest $, example descriptions)
@@ -73,6 +80,8 @@ def seed_demo_data(today: date) -> dict:
                      (DEMO_USER_EMAIL,))
         user_id = conn.execute("SELECT id FROM users WHERE lower(email) = lower(%s)",
                                (DEMO_USER_EMAIL,)).fetchone()["id"]
+        conn.execute("UPDATE users SET password_hash = %s WHERE id = %s",
+                     (PasswordHasher().hash(DEMO_PASSWORD), user_id))
         category_ids = {r["name"]: r["id"] for r in
                         conn.execute("SELECT id, name FROM categories WHERE user_id IS NULL")}
 
@@ -101,6 +110,7 @@ def main() -> int:
     finally:
         db.close_pool()
     print(f"demo user {DEMO_USER_EMAIL}: {counts['transactions']} transactions, {counts['budgets']} budgets")
+    print(f"log in with {DEMO_USER_EMAIL} / {DEMO_PASSWORD} (local only)")
     return 0
 
 

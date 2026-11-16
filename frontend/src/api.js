@@ -35,6 +35,10 @@ async function request(method, path, body) {
   } catch {
     throw new ApiError("Can't reach the server. Is the backend running?", 0)
   }
+  if (response.status === 401 && !path.startsWith('/api/auth/')) {
+    // Logged out somewhere else, or the session expired: the app shows the login page.
+    window.dispatchEvent(new Event(SESSION_EXPIRED))
+  }
   if (response.status === 204) return null // deleted: no body
   const data = await response.json().catch(() => null)
   if (response.status < 200 || response.status >= 300) {
@@ -48,6 +52,20 @@ async function request(method, path, body) {
 }
 
 const query = (month) => `?month=${encodeURIComponent(month)}`
+
+/** Fired on window when any API call answers 401 (see AuthProvider). */
+export const SESSION_EXPIRED = 'budget-app:session-expired'
+
+// Login. The session lives in an httpOnly cookie the browser sends by itself:
+// this code never sees or stores the token.
+export const getMe = () => request('GET', '/api/auth/me')
+export const logIn = (email, password) => request('POST', '/api/auth/login', { email, password })
+export const signUp = (email, password) => request('POST', '/api/auth/signup', { email, password })
+export const logOut = () => request('POST', '/api/auth/logout')
+
+// The account
+export const exportMyData = () => request('GET', '/api/account/export')
+export const deleteMyAccount = (password) => request('POST', '/api/account/delete', { password })
 
 /**
  * Ask the backend for its health.
@@ -69,6 +87,8 @@ export const getDashboard = (month) => request('GET', `/api/dashboard${query(mon
 // Categories: [{ id, name, is_default }]
 export const getCategories = () => request('GET', '/api/categories')
 export const createCategory = (name) => request('POST', '/api/categories', { name })
+export const renameCategory = (id, name) => request('PUT', `/api/categories/${id}`, { name })
+export const deleteCategory = (id) => request('DELETE', `/api/categories/${id}`)
 
 // Transactions: [{ id, posted_date, amount_cents, description, category_id, category_name, category_source }]
 export const getTransactions = (month) => request('GET', `/api/transactions${query(month)}`)

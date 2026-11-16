@@ -5,6 +5,9 @@ uvicorn[standard]>=0.38,<1
 # Postgres driver + connection pool
 psycopg[binary,pool]>=3.2,<4
 
+# Password hashing (argon2, the current recommendation for passwords)
+argon2-cffi>=25.1,<26
+
 # Read settings from .env
 pydantic-settings>=2.11,<3
 

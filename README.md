@@ -2,10 +2,10 @@
 
 A simple budgeting app with an AI agent, built as a learning project.
 
-> **Status:** the backend MVP (categories, transactions, budgets, dashboard)
-> and the frontend pages (welcome, dashboard, transactions, budgets) are built
-> and tested; there is no login yet, every request acts as a fake **demo user**.
-> **Next:** login (see [Next steps](#next-steps)).
+> **Status:** the app works end to end without AI: login (sign up, log in,
+> log out), categories, transactions, budgets, a dashboard, and an account page
+> (download my data, delete my account). Light theme. **Next:** deploy on AWS,
+> then the AI with Amazon Bedrock (see [Next steps](#next-steps)).
 
 ## Running locally
 
@@ -34,6 +34,9 @@ only the demo user's data, safe to rerun):
 cd backend && .venv/bin/python -m app.seed
 ```
 
+Then log in at http://localhost:5173 as `demo@budget.local` / `demo-password`.
+**Local only:** never run the seed script against a database real people use.
+
 ## API
 
 All amounts are **integer cents** (negative = spent, positive = received);
@@ -41,7 +44,14 @@ months are `"2026-11"`. Interactive docs: http://127.0.0.1:8000/docs
 
 | Method | Endpoint | Does |
 |---|---|---|
-| GET | `/health` | Backend + database status (503 if the DB is down) |
+| GET | `/health` | Backend + database status (503 if the DB is down). Public |
+| POST | `/api/auth/signup` | Create an account and log in (sets the session cookie) |
+| POST | `/api/auth/login` | Log in (401 wrong email or password, 429 after 5 failures in 15 min) |
+| POST | `/api/auth/logout` | End the session |
+| GET | `/api/auth/me` | Who is logged in (401 if nobody) |
+| GET | `/api/account/export` | Everything stored about you, as JSON |
+| POST | `/api/account/delete` | Delete your account and all your data (needs `{"password"}`) |
+| PUT, DELETE | `/api/categories/{id}` | Rename / delete one of your own categories |
 | GET, POST | `/api/categories` | List defaults + own / create (409 if the name exists) |
 | GET | `/api/transactions?month=2026-11` | A month's transactions, newest first |
 | POST | `/api/transactions` | Create |
@@ -51,8 +61,13 @@ months are `"2026-11"`. Interactive docs: http://127.0.0.1:8000/docs
 | DELETE | `/api/budgets/{id}` | Remove a budget |
 | GET | `/api/dashboard?month=2026-11` | Income, spending, and spending vs budget per category |
 
-Errors: 404 not found (also when it belongs to another user), 409 duplicate,
-422 invalid input; the body is `{"detail": "..."}`.
+Everything under `/api/` except `/api/auth/*` needs a login. The session is a
+random token in an **httpOnly, SameSite=Lax** cookie; the database stores only
+its SHA-256 hash. Passwords are hashed with argon2.
+
+Errors: 401 not logged in, 404 not found (also when it belongs to another
+user), 409 duplicate, 422 invalid input, 429 too many attempts; the body is
+`{"detail": "..."}`.
 
 ## Tests
 
@@ -102,12 +117,12 @@ budget_app/
 │   │   ├── main.py           creates the FastAPI app, plugs in routers, maps errors to HTTP codes
 │   │   ├── db.py             Postgres connection pool
 │   │   ├── config.py         settings read from environment variables
-│   │   ├── dependencies.py   builds services; get_current_user_id() (demo user for now)
+│   │   ├── dependencies.py   builds services; get_current_user_id() reads the session cookie
 │   │   ├── errors.py         NotFound / InvalidInput / Conflict (raised by services)
 │   │   ├── months.py         "2026-11" <-> date helpers
 │   │   ├── migrate.py        applies migrations/*.sql
 │   │   ├── seed.py           fake data for the demo user
-│   │   ├── routers/          HTTP: health, categories, transactions, budgets, dashboard
+│   │   ├── routers/          HTTP: health, auth (login, account), categories, transactions, budgets, dashboard
 │   │   ├── services/         business rules (dashboard math in build_dashboard())
 │   │   ├── repositories/     SQL, always filtered by user_id
 │   │   └── agent/            empty for now; see its README
@@ -129,7 +144,7 @@ budget_app/
 | Agent | Inside the backend, calls services | One path to the data, so rules and permissions always apply |
 | Money | Integer cents (`bigint`) | Floats cause rounding errors (`0.1 + 0.2 != 0.3`) |
 | Users | `user_id` on every table, every query filtered by it | Isolation; 404 (not 403) for other users' rows so nothing leaks |
-| Login | Not yet: `get_current_user_id()` returns a demo user | Build the app first; real login replaces only that function |
+| Login | Own accounts: argon2 passwords, server-side sessions in an httpOnly cookie | No outside provider; logout ends a session immediately (unlike a JWT); a stolen database gives neither passwords nor live sessions |
 | Refunds | Dashboard uses net per category | A $25 refund lowers that category's spending |
 | Look | Dark; phones get a floating bottom nav, desktops (960px+) a sidebar and two-column pages | Follows the Dribbble budget-app shot we picked |
 | Responsive layout | One set of components; CSS decides the layout (phone < 960px, icon rail 960–1199px, full sidebar 1200px+) | No separate desktop pages to keep in sync |
@@ -140,23 +155,18 @@ budget_app/
 
 ## Next steps
 
-1. ~~**Frontend pages**~~: done. Welcome, Dashboard, Transactions (add, edit,
-   delete), Budgets (set limits, new categories), a shared month picker.
-2. **Login** (next): replace `get_current_user_id()` in `backend/app/dependencies.py`
-   with real auth (argon2 password hashes, server-side sessions in an httpOnly
-   cookie, rate limiting on login). Everything else already takes `user_id`
-   from there. **Required before a public deploy**: without it, anyone with the
-   URL is the demo user.
-3. **Deploy on AWS**: one EC2 server with Docker Compose and Caddy (HTTPS), like
-   job-tracker. Until login exists, only reachable from the owner's IP.
-4. **AI, the main goal of the project**, using **Amazon Bedrock** as the model
+1. ~~Frontend pages~~ and ~~login~~: done.
+2. **Deploy on AWS** (next): one EC2 server with Docker Compose and Caddy
+   (HTTPS), like job-tracker. Set `COOKIE_SECURE=true`. Don't run the seed
+   script there.
+3. **AI, the main goal of the project**, using **Amazon Bedrock** as the model
    provider: auto-categorization (rules first, LLM for unknown merchants) and a
    chat agent that calls services and needs confirmation before any change.
    - The server gets Bedrock access through an **IAM role**: no API key in `.env`.
    - Only `backend/app/agent/llm.py` knows the provider; the tools and the loop
      are our own code (not Bedrock Agents), so switching providers is one file.
    - Check which models Bedrock offers in the chosen region first.
-5. **Later**: bank CSV import (worker + dedupe).
+4. **Later**: bank CSV import (worker + dedupe).
 
 ## Testing
 

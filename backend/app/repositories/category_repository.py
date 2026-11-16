@@ -20,13 +20,36 @@ class CategoryRepository:
                 {"id": category_id, "user_id": user_id},
             ).fetchone()
 
-    def name_taken(self, user_id: int, name: str) -> bool:
-        """True if a default or one of the user's own categories already has this name."""
+    def name_taken(self, user_id: int, name: str, except_id: int | None = None) -> bool:
+        """True if a default or one of the user's own categories (other than
+        except_id) already has this name."""
         with get_connection() as conn:
             return conn.execute(
-                f"SELECT 1 FROM categories WHERE lower(name) = lower(%(name)s) AND {_VISIBLE}",
-                {"name": name, "user_id": user_id},
+                f"""SELECT 1 FROM categories
+                    WHERE lower(name) = lower(%(name)s) AND {_VISIBLE} AND id IS DISTINCT FROM %(except_id)s""",
+                {"name": name, "user_id": user_id, "except_id": except_id},
             ).fetchone() is not None
+
+    def rename_own(self, user_id: int, category_id: int, name: str) -> dict | None:
+        """None unless the category is this user's own (defaults can't be renamed)."""
+        with get_connection() as conn:
+            return conn.execute(
+                f"UPDATE categories SET name = %s WHERE id = %s AND user_id = %s RETURNING {_COLUMNS}",
+                (name, category_id, user_id),
+            ).fetchone()
+
+    def delete_own(self, user_id: int, category_id: int) -> bool:
+        """Its transactions become uncategorized and its budgets go (see migrations 003, 004)."""
+        with get_connection() as conn:  # one transaction: both steps or neither
+            # ON DELETE SET NULL clears category_id; also say nobody chose a category now.
+            conn.execute(
+                "UPDATE transactions SET category_source = 'none' WHERE category_id = %s AND user_id = %s",
+                (category_id, user_id),
+            )
+            deleted = conn.execute(
+                "DELETE FROM categories WHERE id = %s AND user_id = %s", (category_id, user_id)
+            )
+            return deleted.rowcount == 1
 
     def create(self, user_id: int, name: str) -> dict:
         with get_connection() as conn:

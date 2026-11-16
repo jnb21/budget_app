@@ -12,13 +12,18 @@ from psycopg_pool import PoolTimeout
 
 from app import db
 from app.config import Settings, get_settings
-from app.errors import ConflictError, InvalidInputError, NotFoundError
+from app.errors import (
+    ConflictError, InvalidInputError, NotFoundError, TooManyRequestsError, UnauthorizedError,
+)
 from app.migrate import apply_migrations
-from app.routers import budgets, categories, dashboard, health, transactions
+from app.routers import auth, budgets, categories, dashboard, health, transactions
 
 # Service errors -> HTTP status codes. Services raise these without knowing
 # about HTTP; this table is the one place they are translated.
-ERROR_STATUS = {NotFoundError: 404, InvalidInputError: 422, ConflictError: 409}
+ERROR_STATUS = {
+    NotFoundError: 404, InvalidInputError: 422, ConflictError: 409,
+    UnauthorizedError: 401, TooManyRequestsError: 429,
+}
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -36,7 +41,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         db.close_pool()
 
     app = FastAPI(title="Budget App", lifespan=lifespan)
-    for module in (health, categories, transactions, budgets, dashboard):
+    for module in (health, auth, categories, transactions, budgets, dashboard):
         app.include_router(module.router)
 
     async def service_error(request: Request, exc: Exception) -> JSONResponse:

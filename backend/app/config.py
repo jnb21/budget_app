@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     db_pool_min_size: int = 1         # connections kept open even when idle
     db_pool_max_size: int = 5         # most connections open at the same time
     db_connect_timeout: float = 10.0  # seconds to wait for Postgres at startup
+    session_days: int = 30            # how long a login lasts
+    cookie_secure: bool = False       # True in production: the cookie is only sent over HTTPS
 
     @field_validator("database_url")
     @classmethod

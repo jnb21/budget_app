@@ -12,3 +12,11 @@ class InvalidInputError(Exception):
 
 class ConflictError(Exception):
     """It would duplicate something that must be unique. -> 409"""
+
+
+class UnauthorizedError(Exception):
+    """Not logged in, or wrong email/password. -> 401"""
+
+
+class TooManyRequestsError(Exception):
+    """Too many failed attempts: wait and try again. -> 429"""
