@@ -34,8 +34,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Startup: runs once, BEFORE the server accepts any request.
         # If either step fails, the server never starts (fail fast).
-        db.open_pool(settings or get_settings())
-        apply_migrations()
+        active = settings or get_settings()
+        # Locally the app migrates at startup. In production, leave
+        # MIGRATION_DATABASE_URL out of the app's environment and run
+        # `python -m app.migrate` as a deploy step instead, so the running
+        # server never holds the owner's password.
+        if active.migration_database_url:
+            apply_migrations(active)
+        db.open_pool(active)
         yield
         # Shutdown: runs once, when the server stops.
         db.close_pool()

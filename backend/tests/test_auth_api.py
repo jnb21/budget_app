@@ -172,7 +172,7 @@ def test_export_contains_my_data(client):
     assert "password_hash" not in str(export)
 
 
-def test_deleting_the_account_removes_everything(client):
+def test_deleting_the_account_removes_everything(client, owner):
     sign_up(client, "alice@example.com")
     client.post("/api/transactions", json=TRANSACTION)
 
@@ -181,7 +181,7 @@ def test_deleting_the_account_removes_everything(client):
 
     right = client.post("/api/account/delete", json={"password": PASSWORD})
     assert right.status_code == 204
-    with db.get_connection() as conn:
+    with owner() as conn:  # the owner sees every row, so 0 really means none left
         left = conn.execute("SELECT (SELECT count(*) FROM users) + (SELECT count(*) FROM transactions)"
                             " + (SELECT count(*) FROM sessions) AS n").fetchone()["n"]
     assert left == 0

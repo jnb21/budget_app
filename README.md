@@ -4,7 +4,8 @@ A simple budgeting app with an AI agent, built as a learning project.
 
 > **Status:** the app works end to end without AI: login (sign up, log in,
 > log out), categories, transactions, budgets, a dashboard, and an account page
-> (download my data, delete my account). Light theme. **Next:** deploy on AWS,
+> (download my data, delete my account). Light theme. Row-level security in
+> Postgres. **Next:** deploy on AWS,
 > then the AI with Amazon Bedrock (see [Next steps](#next-steps)).
 
 ## Running locally
@@ -12,7 +13,7 @@ A simple budgeting app with an AI agent, built as a learning project.
 Needs Docker Desktop, Python 3.14 and Node 26.
 
 ```bash
-cp .env.example .env              # first time only; then set a real password
+cp .env.example .env              # first time only; then set two real passwords
 docker compose up -d              # Postgres on 127.0.0.1:5433
 
 cd backend
@@ -26,6 +27,24 @@ npm run dev                       # http://localhost:5173
 
 The backend applies database migrations automatically at startup
 (or by hand: `.venv/bin/python -m app.migrate`).
+
+### Two database logins
+
+| Setting | Login | May |
+|---|---|---|
+| `MIGRATION_DATABASE_URL` | the owner (`budget`, created by Docker) | create and change tables and rules: migrations only |
+| `DATABASE_URL` | the app (`budget_app`) | read and write rows, nothing else |
+
+Why: Postgres **row-level security** (migration 006) only lets a request see
+and change its own user's rows, but owners and superusers skip it silently.
+So the running app uses a login with no such powers, and refuses to start if
+`DATABASE_URL` is an owner, a superuser or a `BYPASSRLS` role. Migrations
+create the `budget_app` login with the password from `DATABASE_URL`, so the
+password lives only in `.env`.
+
+In production, give `MIGRATION_DATABASE_URL` to the migration step
+(`python -m app.migrate`) and leave it out of the running app's environment:
+the app then skips migrating at startup and never holds the owner's password.
 
 Fake data for the demo user (3 months of transactions and budgets; replaces
 only the demo user's data, safe to rerun):
@@ -115,16 +134,16 @@ budget_app/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py           creates the FastAPI app, plugs in routers, maps errors to HTTP codes
-│   │   ├── db.py             Postgres connection pool
+│   │   ├── db.py             Postgres connection pool; get_connection(user_id) for row-level security
 │   │   ├── config.py         settings read from environment variables
 │   │   ├── dependencies.py   builds services; get_current_user_id() reads the session cookie
 │   │   ├── errors.py         NotFound / InvalidInput / Conflict (raised by services)
 │   │   ├── months.py         "2026-11" <-> date helpers
-│   │   ├── migrate.py        applies migrations/*.sql
+│   │   ├── migrate.py        applies migrations/*.sql as the owner; creates the app's login
 │   │   ├── seed.py           fake data for the demo user
 │   │   ├── routers/          HTTP: health, auth (login, account), categories, transactions, budgets, dashboard
 │   │   ├── services/         business rules (dashboard math in build_dashboard())
-│   │   ├── repositories/     SQL, always filtered by user_id
+│   │   ├── repositories/     SQL, always filtered by user_id (and RLS behind it)
 │   │   └── agent/            empty for now; see its README
 │   ├── migrations/           numbered .sql files that create/change tables
 │   ├── tests/
@@ -144,6 +163,7 @@ budget_app/
 | Agent | Inside the backend, calls services | One path to the data, so rules and permissions always apply |
 | Money | Integer cents (`bigint`) | Floats cause rounding errors (`0.1 + 0.2 != 0.3`) |
 | Users | `user_id` on every table, every query filtered by it | Isolation; 404 (not 403) for other users' rows so nothing leaks |
+| Row-level security | On `transactions`, `budgets`, `categories`; the app connects as a login that can't skip it | A second lock: a query that forgets its user filter still sees nothing of other users. Auth tables stay outside it (login must find a user before anyone is known) |
 | Login | Own accounts: argon2 passwords, server-side sessions in an httpOnly cookie | No outside provider; logout ends a session immediately (unlike a JWT); a stolen database gives neither passwords nor live sessions |
 | Refunds | Dashboard uses net per category | A $25 refund lowers that category's spending |
 | Look | Dark; phones get a floating bottom nav, desktops (960px+) a sidebar and two-column pages | Follows the Dribbble budget-app shot we picked |
@@ -158,7 +178,8 @@ budget_app/
 1. ~~Frontend pages~~ and ~~login~~: done.
 2. **Deploy on AWS** (next): one EC2 server with Docker Compose and Caddy
    (HTTPS), like job-tracker. Set `COOKIE_SECURE=true`. Don't run the seed
-   script there.
+   script there. Run migrations as a separate step with the owner login (see
+   [Two database logins](#two-database-logins)).
 3. **AI, the main goal of the project**, using **Amazon Bedrock** as the model
    provider: auto-categorization (rules first, LLM for unknown merchants) and a
    chat agent that calls services and needs confirmation before any change.
@@ -180,6 +201,7 @@ kind of test it is, and how to read it. Every test follows **Arrange → Act →
 | API tests (FastAPI `TestClient`) | routers | Wrong status codes, bad input accepted | Sometimes |
 | Full-stack tests (`TestClient` + real DB) | `main.py` | Layers not wired together, startup/shutdown | Yes |
 | Architecture tests (read the source) | agent | `agent/` importing repositories or the DB | No |
+| Row-level security tests (raw SQL as the app's login) | database | A user reaching another user's rows even without a `WHERE user_id`; a new table missing its rules | Yes |
 | Agent tests (fake services, fake LLM) | agent | Wrong tool calls, endless loops | No, and no API cost |
 | Component tests (Vitest, fake `fetch`) | frontend | A page state shown wrong, a button not working, the wrong request sent | No backend |
 | Unit tests (Vitest) | frontend helpers | Money/date formatting, amounts parsed wrong | No |

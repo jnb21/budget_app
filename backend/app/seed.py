@@ -80,6 +80,7 @@ def seed_demo_data(today: date) -> dict:
                      (DEMO_USER_EMAIL,))
         user_id = conn.execute("SELECT id FROM users WHERE lower(email) = lower(%s)",
                                (DEMO_USER_EMAIL,)).fetchone()["id"]
+        db.act_as(conn, user_id)  # from here on, row-level security lets us write the demo user's rows
         conn.execute("UPDATE users SET password_hash = %s WHERE id = %s",
                      (PasswordHasher().hash(DEMO_PASSWORD), user_id))
         category_ids = {r["name"]: r["id"] for r in

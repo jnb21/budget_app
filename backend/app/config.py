@@ -19,18 +19,20 @@ class Settings(BaseSettings):
     # override any value. Keys in .env we don't use (POSTGRES_*) are ignored.
     model_config = SettingsConfigDict(env_file=ENV_FILE, extra="ignore")
 
-    database_url: str                 # required: the app refuses to start without it
+    # Two logins (README, "Two database logins"):
+    database_url: str                 # the app's login: reads and writes rows only (required)
+    migration_database_url: str | None = None  # the owner: creates tables and rules (migrations only)
     db_pool_min_size: int = 1         # connections kept open even when idle
     db_pool_max_size: int = 5         # most connections open at the same time
     db_connect_timeout: float = 10.0  # seconds to wait for Postgres at startup
     session_days: int = 30            # how long a login lasts
     cookie_secure: bool = False       # True in production: the cookie is only sent over HTTPS
 
-    @field_validator("database_url")
+    @field_validator("database_url", "migration_database_url")
     @classmethod
-    def must_be_postgres(cls, value: str) -> str:
-        if not value.startswith(("postgresql://", "postgres://")):
-            raise ValueError("DATABASE_URL must start with postgresql://")
+    def must_be_postgres(cls, value: str | None) -> str | None:
+        if value is not None and not value.startswith(("postgresql://", "postgres://")):
+            raise ValueError("database URLs must start with postgresql://")
         return value
 
 

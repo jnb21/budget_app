@@ -53,7 +53,10 @@ def test_app_refuses_to_start_when_the_database_is_unreachable(test_settings):
     db.close_pool()
     real = urlsplit(test_settings.database_url)
     unreachable = urlunsplit(real._replace(netloc=f"{real.username}:x@127.0.0.1:1"))  # nothing on port 1
-    bad_settings = Settings(_env_file=None, database_url=unreachable, db_connect_timeout=1)
+    # migration_database_url=None: say it outright, or a MIGRATION_DATABASE_URL
+    # environment variable would be picked up and the real migrations would run.
+    bad_settings = Settings(_env_file=None, database_url=unreachable, migration_database_url=None,
+                            db_connect_timeout=1)
 
     with pytest.raises(PoolTimeout):
         with TestClient(create_app(bad_settings)):

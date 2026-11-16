@@ -86,7 +86,7 @@ class AuthRepository:
 
     def export_user_data(self, user_id: int) -> dict:
         """Everything stored about the user, for "download my data"."""
-        with get_connection() as conn:
+        with get_connection(user_id) as conn:
             def rows(sql):
                 return conn.execute(sql, (user_id,)).fetchall()
 

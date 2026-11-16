@@ -28,17 +28,35 @@ def test_can_run_a_query(db_pool):
     assert row == {"answer": 1}  # a dict, thanks to row_factory=dict_row
 
 
-def test_work_is_rolled_back_when_an_error_happens(empty_database):
-    # Arrange + Act: create a table, then crash before the block ends.
+def test_work_is_rolled_back_when_an_error_happens(migrated, owner):
+    # Act: add a user, then crash before the block ends.
     with pytest.raises(ZeroDivisionError):
         with db.get_connection() as conn:
-            conn.execute("CREATE TABLE rollback_probe (id int)")
+            conn.execute("INSERT INTO users (email) VALUES ('rollback@example.com')")
             1 / 0
 
-    # Assert: the table was never committed.
-    with db.get_connection() as conn:
-        row = conn.execute("SELECT to_regclass('rollback_probe') AS found").fetchone()
-    assert row["found"] is None
+    # Assert: the user was never committed (checked as the owner, who sees every row).
+    with owner() as conn:
+        assert conn.execute("SELECT count(*) AS n FROM users").fetchone()["n"] == 0
+
+
+def test_the_user_is_set_for_one_transaction_only(db_pool):
+    with db.get_connection(user_id=42) as conn:
+        during = conn.execute("SELECT current_setting('app.user_id', true) AS v").fetchone()["v"]
+    with db.get_connection() as conn:  # the next borrower: likely the very same connection
+        after = conn.execute("SELECT current_setting('app.user_id', true) AS v").fetchone()["v"]
+
+    assert during == "42"
+    assert after in (None, "")  # the next request must not act as user 42
+
+
+def test_the_owner_login_is_refused(test_settings):
+    # Owners skip row-level security without any error: refuse to start instead.
+    owner_settings = Settings(_env_file=None, database_url=test_settings.migration_database_url)
+
+    with pytest.raises(RuntimeError, match="skips row-level security"):
+        db.open_pool(owner_settings)
+    assert db._pool is None
 
 
 def test_using_the_pool_before_opening_it_is_an_error():

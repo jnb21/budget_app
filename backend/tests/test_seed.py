@@ -4,25 +4,22 @@ from datetime import date
 
 import pytest
 
-from app import db
 from app.dependencies import DEMO_USER_EMAIL
-from app.migrate import apply_migrations
 from app.seed import BUDGETS, MONTHS, fake_transactions, seed_demo_data
 
 TODAY = date(2026, 11, 15)
 
 
 @pytest.fixture
-def migrated(empty_database):
-    apply_migrations()
+def count(owner):
+    """Counts as the owner: every user's rows, not only one user's."""
+    def run(sql, *params):
+        with owner() as conn:
+            return conn.execute(sql, params).fetchone()["n"]
+    return run
 
 
-def count(sql, *params):
-    with db.get_connection() as conn:
-        return conn.execute(sql, params).fetchone()["n"]
-
-
-def test_seeding_twice_gives_the_same_data(migrated):
+def test_seeding_twice_gives_the_same_data(migrated, count):
     first = seed_demo_data(TODAY)
     second = seed_demo_data(TODAY)
 
@@ -31,8 +28,8 @@ def test_seeding_twice_gives_the_same_data(migrated):
     assert count("SELECT count(*) AS n FROM budgets") == MONTHS * len(BUDGETS)
 
 
-def test_seeding_never_touches_other_users(migrated):
-    with db.get_connection() as conn:
+def test_seeding_never_touches_other_users(migrated, owner, count):
+    with owner() as conn:
         alice = conn.execute("INSERT INTO users (email) VALUES ('alice@example.com') RETURNING id").fetchone()["id"]
         conn.execute("INSERT INTO transactions (user_id, posted_date, amount_cents, description) "
                      "VALUES (%s, '2026-11-01', -100, 'mine')", (alice,))
@@ -59,7 +56,7 @@ def test_month_list_crosses_the_new_year():
         date(2026, 11, 1), date(2026, 12, 1), date(2027, 1, 1)}
 
 
-def test_the_demo_user_is_the_one_the_app_uses(migrated):
+def test_the_demo_user_is_the_one_the_app_uses(migrated, count):
     seed_demo_data(TODAY)
 
     assert count("SELECT count(*) AS n FROM users WHERE email = %s", DEMO_USER_EMAIL) == 1
