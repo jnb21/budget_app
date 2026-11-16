@@ -196,11 +196,15 @@ budget_app/
 ## Next steps
 
 1. ~~Frontend pages~~ and ~~login~~: done.
-2. **Deploy on AWS** (next): one EC2 server with Docker Compose and Caddy
-   (HTTPS), like job-tracker. Set `COOKIE_SECURE=true`. Don't run the seed
-   script there. Run migrations as a separate step with the owner login (see
-   [Two database logins](#two-database-logins)); start uvicorn with
-   `--proxy-headers` (see [Rate limits](#rate-limits)).
+2. **Deploy on AWS** (next), plan and diagrams in
+   [`docs/aws-architecture.html`](docs/aws-architecture.html): Route 53 →
+   CloudFront, which serves the app from a private S3 bucket and sends
+   `/api/*` to one EC2 server (Caddy, API, worker and Postgres in Docker
+   Compose; only CloudFront can reach it). Set `COOKIE_SECURE=true`. Don't run
+   the seed script there. Run migrations as a separate step with the owner
+   login (see [Two database logins](#two-database-logins)). Behind CloudFront,
+   take the visitor's IP for the rate limits from the `CloudFront-Viewer-Address`
+   header, or every visitor shares one bucket (see [Rate limits](#rate-limits)).
 3. **AI, the main goal of the project**, using **Amazon Bedrock** as the model
    provider: auto-categorization (rules first, LLM for unknown merchants) and a
    chat agent that calls services and needs confirmation before any change.

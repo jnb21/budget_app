@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Budget App on AWS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Plan: cool slate neutrals; two path colors carry meaning everywhere
+   (teal = the static app from S3, violet = API requests to the server);
+   amber marks gotchas. Layout: one reading column, figures break wider. */
+:root {
+  --bg: #f4f5f8;
+  --surface: #ffffff;
+  --ink: #171a22;
+  --ink-2: #4b5160;
+  --line: #d9dce4;
+  --static: #0f7f78;
+  --api: #6c4fe6;
+  --warn: #9a5b00;
+  --warn-bg: #fdf3e1;
+  --tint: #eef0f5;
+  --display: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+  --body: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12141a;
+    --surface: #1b1e26;
+    --ink: #eceef3;
+    --ink-2: #a9afbd;
+    --line: #333845;
+    --static: #3cc4b9;
+    --api: #a693ff;
+    --warn: #f0b44c;
+    --warn-bg: #2b2416;
+    --tint: #222631;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12141a;
+  --surface: #1b1e26;
+  --ink: #eceef3;
+  --ink-2: #a9afbd;
+  --line: #333845;
+  --static: #3cc4b9;
+  --api: #a693ff;
+  --warn: #f0b44c;
+  --warn-bg: #2b2416;
+  --tint: #222631;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.6 var(--body);
+}
+main {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 48px 24px 80px;
+  display: grid;
+  gap: 48px;
+}
+.prose { max-width: 70ch; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(32px, 5vw, 48px); font-weight: 700; letter-spacing: -0.015em; }
+h2 { font-size: 26px; font-weight: 700; margin-bottom: 14px; }
+h3 { font-size: 17px; font-weight: 600; margin-bottom: 6px; }
+p { margin: 0 0 12px; }
+code, .mono { font-family: var(--mono); font-size: 0.88em; }
+code { background: var(--tint); padding: 1px 5px; border-radius: 4px; }
+.lede { font-size: 18px; color: var(--ink-2); margin-top: 14px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface);
+  font-size: 13px; color: var(--ink-2);
+}
+.dot { width: 9px; height: 9px; border-radius: 50%; }
+
+/* The three changes to the sketch */
+.changes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.change {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 18px 20px;
+}
+.change .num { font-family: var(--display); font-weight: 700; color: var(--api); font-size: 14px; letter-spacing: 0.04em; }
+.change p { color: var(--ink-2); font-size: 15px; margin: 0; }
+
+/* Figures */
+figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 20px 16px; }
+.scroll { overflow-x: auto; }
+figure svg { display: block; width: 100%; height: auto; min-width: 880px; color: var(--ink); }
+figcaption { margin-top: 12px; color: var(--ink-2); font-size: 14px; max-width: 80ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 13px; color: var(--ink-2); margin-bottom: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.legend i { display: inline-block; width: 26px; height: 0; border-top: 2.5px solid; }
+.legend i.edge-static { border-top-color: var(--static); }
+.legend i.edge-api { border-top-color: var(--api); }
+
+/* SVG classes (styles live here, outside the SVG, so they follow the theme) */
+.box { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+.box-tint { fill: var(--tint); stroke: var(--line); stroke-width: 1.5; }
+.group { fill: none; stroke: var(--ink-2); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.t-title { font: 600 14px var(--body); fill: var(--ink); }
+.t-sub { font: 400 11.5px var(--body); fill: var(--ink-2); }
+.t-mono { font: 500 11px var(--mono); fill: var(--ink-2); }
+.t-label { font: 500 11.5px var(--body); fill: var(--ink-2); }
+.t-step { font: 700 11px var(--body); fill: var(--surface); }
+.t-group { font: 600 12px var(--body); fill: var(--ink-2); letter-spacing: 0.02em; }
+.e { fill: none; stroke: var(--ink-2); stroke-width: 1.6; }
+.e-static { fill: none; stroke: var(--static); stroke-width: 2.4; }
+.e-api { fill: none; stroke: var(--api); stroke-width: 2.4; }
+.e-dns { fill: none; stroke: var(--ink-2); stroke-width: 1.6; stroke-dasharray: 4 4; }
+.e-reply { fill: none; stroke-width: 1.8; stroke-dasharray: 6 4; }
+.badge-static { fill: var(--static); }
+.badge-api { fill: var(--api); }
+.badge-ink { fill: var(--ink-2); }
+.edge-static { stroke: var(--static); }
+.edge-api { stroke: var(--api); }
+.life { stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 3 4; }
+.fill-static { fill: var(--static); }
+.fill-api { fill: var(--api); }
+.fill-ink { fill: var(--ink-2); }
+
+/* Decision cards */
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+.card p, .card li { color: var(--ink-2); font-size: 15px; }
+.card ul { margin: 6px 0 0; padding-left: 18px; }
+.card.gotcha { border-left: 4px solid var(--warn); }
+.tag {
+  display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--warn); background: var(--warn-bg); padding: 2px 8px; border-radius: 4px; margin-bottom: 8px;
+}
+
+/* Phases */
+.phases { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.phase { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+.phase.now { border-color: var(--api); box-shadow: inset 0 3px 0 var(--api); }
+.phase .when { font-size: 13px; color: var(--ink-2); margin-bottom: 8px; }
+.phase ul { margin: 0; padding-left: 18px; color: var(--ink-2); font-size: 15px; }
+.phase li { margin-bottom: 6px; }
+
+/* Deploy steps */
+ol.steps { margin: 0; padding-left: 22px; color: var(--ink-2); }
+ol.steps li { margin-bottom: 8px; }
+ol.steps strong { color: var(--ink); font-weight: 600; }
+
+footer { color: var(--ink-2); font-size: 13px; border-top: 1px solid var(--line); padding-top: 18px; }
+a { color: var(--api); }
+a:focus-visible { outline: 2px solid var(--api); outline-offset: 2px; }
+
+@media (max-width: 600px) {
+  main { padding: 32px 16px 64px; gap: 36px; }
+  figure { padding: 14px 12px 12px; }
+}
+</style>
+</head>
+<body>
+<main>
+
+<header class="prose">
+  <h1>Budget App on AWS</h1>
+  <p class="lede">Phase 1: one server and no load balancer yet. Route 53 points your domain at CloudFront, CloudFront serves the React app from S3 and sends <code>/api/*</code> to an EC2 server, and the AI agents run on that server and call Amazon Bedrock.</p>
+  <div class="meta">
+    <span class="chip"><span class="dot" style="background: var(--static)"></span>Static app: browser → CloudFront → S3</span>
+    <span class="chip"><span class="dot" style="background: var(--api)"></span>API: browser → CloudFront → EC2</span>
+    <span class="chip">Domain shown as <span class="mono">budget.example.com</span> (placeholder)</span>
+  </div>
+</header>
+
+<section aria-labelledby="changes-h">
+  <h2 id="changes-h">Three changes to the sketch</h2>
+  <div class="changes">
+    <div class="change">
+      <div class="num">1 · ROUTE 53</div>
+      <h3>DNS only, then out of the way</h3>
+      <p>Route 53 answers one question: where is <span class="mono">budget.example.com</span>? It returns CloudFront's address (an alias record), and from then on the browser talks to CloudFront directly. Requests never pass through Route 53.</p>
+    </div>
+    <div class="change">
+      <div class="num">2 · CLOUDFRONT</div>
+      <h3>Two branches, not one chain</h3>
+      <p>CloudFront splits requests by path. Loading the app (<span class="mono">/</span>, <span class="mono">/assets/*</span>) goes to S3 and never touches the server. Saving a transaction (<span class="mono">/api/*</span>) goes to EC2 and never touches S3. One domain for both, so the login cookie works and there's no CORS, exactly like the Vite proxy in development.</p>
+    </div>
+    <div class="change">
+      <div class="num">3 · THE AI</div>
+      <h3>Answers come back two ways</h3>
+      <p>Chat: the agent runs inside the API request and streams its answer back. Background work, like auto-categorizing: the API doesn't wait. A worker does the job and writes the result to Postgres, and the screen shows it on the next load. Postgres was missing from the sketch; it's where those answers land.</p>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="arch-h">
+  <h2 id="arch-h">The architecture</h2>
+  <figure>
+    <div class="legend" aria-hidden="true">
+      <span><i class="edge-static"></i>Static app (cached)</span>
+      <span><i class="edge-api"></i>API requests (never cached)</span>
+      <span><i style="border-top-style: dashed; border-top-width: 1.6px"></i>DNS, backups, secrets</span>
+    </div>
+    <div class="scroll">
+    <svg viewBox="0 0 1120 620" role="img" aria-label="Browser looks up the domain in Route 53, then sends every request to CloudFront. CloudFront serves the app from a private S3 bucket and forwards /api requests to one EC2 server, where Caddy, the FastAPI app, a background worker and Postgres run in Docker. The agent code calls Amazon Bedrock with the server's IAM role. Postgres is backed up nightly to S3; passwords come from SSM Parameter Store; logs go to CloudWatch.">
+      <defs>
+        <marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fill-ink"/></marker>
+        <marker id="a-static" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fill-static"/></marker>
+        <marker id="a-api" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fill-api"/></marker>
+      </defs>
+
+      <!-- Browser -->
+      <rect class="box" x="20" y="262" width="130" height="76" rx="10"/>
+      <text class="t-title" x="85" y="293" text-anchor="middle">Browser</text>
+      <text class="t-sub" x="85" y="312" text-anchor="middle">React app</text>
+
+      <!-- Route 53 -->
+      <rect class="box" x="210" y="40" width="190" height="72" rx="10"/>
+      <text class="t-title" x="305" y="68" text-anchor="middle">Route 53</text>
+      <text class="t-mono" x="305" y="88" text-anchor="middle">budget.example.com</text>
+      <text class="t-sub" x="305" y="103" text-anchor="middle">alias → CloudFront</text>
+      <path class="e-dns" d="M85 262 V76 H204" marker-end="url(#a-ink)"/>
+      <circle class="badge-ink" cx="85" cy="170" r="10"/><text class="t-step" x="85" y="174" text-anchor="middle">1</text>
+      <text class="t-label" x="100" y="174">DNS lookup</text>
+
+      <!-- CloudFront -->
+      <rect class="box" x="210" y="250" width="190" height="100" rx="10"/>
+      <text class="t-title" x="305" y="278" text-anchor="middle">CloudFront</text>
+      <text class="t-sub" x="305" y="297" text-anchor="middle">HTTPS · ACM cert (us-east-1)</text>
+      <text class="t-mono" x="305" y="318" text-anchor="middle">/*  → S3</text>
+      <text class="t-mono" x="305" y="335" text-anchor="middle">/api/*, /health → EC2</text>
+      <path class="e" d="M150 300 H204" marker-end="url(#a-ink)"/>
+      <circle class="badge-ink" cx="177" cy="300" r="10"/><text class="t-step" x="177" y="304" text-anchor="middle">2</text>
+
+      <!-- S3 site bucket -->
+      <rect class="box" x="470" y="40" width="210" height="80" rx="10"/>
+      <text class="t-title" x="575" y="68" text-anchor="middle">S3 · site bucket</text>
+      <text class="t-mono" x="575" y="88" text-anchor="middle">index.html, assets/*</text>
+      <text class="t-sub" x="575" y="106" text-anchor="middle">private · read only by CloudFront (OAC)</text>
+      <path class="e-static" d="M345 250 V148 H575 V126" marker-end="url(#a-static)"/>
+      <text class="t-label" x="355" y="140">app files · cached at the edge</text>
+
+      <!-- EC2 group -->
+      <rect class="group" x="460" y="170" width="440" height="410" rx="14"/>
+      <text class="t-group" x="476" y="194">EC2 · one server · Docker Compose</text>
+      <text class="t-sub" x="476" y="211">inbound 443 from CloudFront only · no SSH (Session Manager)</text>
+
+      <!-- Caddy -->
+      <rect class="box-tint" x="480" y="250" width="120" height="70" rx="9"/>
+      <text class="t-title" x="540" y="278" text-anchor="middle">Caddy</text>
+      <text class="t-sub" x="540" y="296" text-anchor="middle">origin TLS</text>
+      <text class="t-sub" x="540" y="311" text-anchor="middle">checks secret header</text>
+      <path class="e-api" d="M400 300 H474" marker-end="url(#a-api)"/>
+      <text class="t-label" x="408" y="290">/api/* · no cache</text>
+      <text class="t-label" x="408" y="320">cookies forwarded</text>
+
+      <!-- API -->
+      <rect class="box-tint" x="630" y="250" width="130" height="70" rx="9"/>
+      <text class="t-title" x="695" y="278" text-anchor="middle">FastAPI</text>
+      <text class="t-sub" x="695" y="296" text-anchor="middle">routers → services</text>
+      <text class="t-sub" x="695" y="311" text-anchor="middle">+ agent loop (chat)</text>
+      <path class="e-api" d="M600 285 H624" marker-end="url(#a-api)"/>
+
+      <!-- Worker -->
+      <rect class="box-tint" x="630" y="360" width="130" height="66" rx="9"/>
+      <text class="t-title" x="695" y="387" text-anchor="middle">Worker</text>
+      <text class="t-sub" x="695" y="405" text-anchor="middle">background AI jobs</text>
+
+      <!-- Postgres -->
+      <rect class="box-tint" x="480" y="470" width="280" height="86" rx="9"/>
+      <text class="t-title" x="620" y="497" text-anchor="middle">Postgres 18</text>
+      <text class="t-sub" x="620" y="515" text-anchor="middle">row-level security · app login can't skip it</text>
+      <text class="t-mono" x="620" y="536" text-anchor="middle">jobs table · EBS volume</text>
+
+      <!-- API ↔ Postgres, worker ↔ Postgres -->
+      <path class="e-api" d="M650 320 V340 H560 V464" marker-end="url(#a-api)"/>
+      <text class="t-label" x="488" y="405">SQL as</text>
+      <text class="t-label" x="488" y="420">app login</text>
+      <path class="e" d="M695 426 V464" marker-end="url(#a-ink)" marker-start="url(#a-ink)"/>
+      <text class="t-label" x="702" y="450">claims jobs, saves results</text>
+
+      <!-- Bedrock -->
+      <rect class="box" x="950" y="250" width="160" height="80" rx="10"/>
+      <text class="t-title" x="1030" y="278" text-anchor="middle">Amazon Bedrock</text>
+      <text class="t-sub" x="1030" y="297" text-anchor="middle">Converse API</text>
+      <text class="t-sub" x="1030" y="313" text-anchor="middle">IAM role · no API key</text>
+      <path class="e-api" d="M760 285 H944" marker-end="url(#a-api)"/>
+      <text class="t-label" x="790" y="276">chat: messages + tools</text>
+      <path class="e" d="M760 393 H860 V310 H944" marker-end="url(#a-ink)"/>
+      <text class="t-label" x="772" y="384">categorize, import</text>
+
+      <!-- SSM -->
+      <rect class="box" x="950" y="120" width="160" height="66" rx="10"/>
+      <text class="t-title" x="1030" y="147" text-anchor="middle">SSM Parameter Store</text>
+      <text class="t-sub" x="1030" y="166" text-anchor="middle">DB passwords (encrypted)</text>
+      <path class="e-dns" d="M944 153 H880 V164" marker-end="url(#a-ink)"/>
+      <text class="t-label" x="1030" y="204" text-anchor="middle">read at start</text>
+
+      <!-- Backups -->
+      <rect class="box" x="950" y="420" width="160" height="66" rx="10"/>
+      <text class="t-title" x="1030" y="447" text-anchor="middle">S3 · backups</text>
+      <text class="t-sub" x="1030" y="466" text-anchor="middle">nightly pg_dump</text>
+      <path class="e-dns" d="M760 513 H900 V453 H944" marker-end="url(#a-ink)"/>
+
+      <!-- CloudWatch -->
+      <rect class="box" x="950" y="520" width="160" height="66" rx="10"/>
+      <text class="t-title" x="1030" y="547" text-anchor="middle">CloudWatch</text>
+      <text class="t-sub" x="1030" y="566" text-anchor="middle">logs · alarms</text>
+      <path class="e-dns" d="M900 553 H944" marker-end="url(#a-ink)"/>
+    </svg>
+    </div>
+    <figcaption>The browser looks up the domain once (1), then sends every request to CloudFront (2). Teal requests end at S3 and are cached; violet requests reach the server, where the agent code calls Bedrock with the server's own IAM role. Nothing on the server is reachable except through CloudFront.</figcaption>
+  </figure>
+</section>
+
+<section aria-labelledby="ai-h">
+  <h2 id="ai-h">How an AI answer gets back to the screen</h2>
+  <div class="prose">
+    <p>Both paths use the same agent code in <code>backend/app/agent/</code>, and its tools call services, never the database. So the AI gets the same rules, the same per-user filtering and the same row-level security as a click in the app.</p>
+  </div>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1120 420" role="img" aria-label="Left, chat: the browser posts a question, the API runs the agent loop, which asks Bedrock, runs the tool it asks for through a service against Postgres, sends the result back, and streams the final answer to the browser. Right, background: the browser saves a transaction, the API stores it with a job and answers at once; the worker later claims the job, asks Bedrock for a category, saves it through a service, and the next page load shows it.">
+      <defs>
+        <marker id="s-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fill-ink"/></marker>
+        <marker id="s-api" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fill-api"/></marker>
+      </defs>
+
+      <!-- Panel A: chat -->
+      <text class="t-title" x="20" y="24">Chat · the user waits a few seconds</text>
+      <text class="t-sub" x="20" y="42">runs inside the API request; the answer streams back</text>
+      <g>
+        <rect class="box" x="20" y="60" width="96" height="34" rx="7"/><text class="t-title" x="68" y="82" text-anchor="middle">Browser</text>
+        <rect class="box" x="146" y="60" width="96" height="34" rx="7"/><text class="t-title" x="194" y="82" text-anchor="middle">API</text>
+        <rect class="box" x="272" y="60" width="96" height="34" rx="7"/><text class="t-title" x="320" y="82" text-anchor="middle">Agent loop</text>
+        <rect class="box" x="398" y="60" width="96" height="34" rx="7"/><text class="t-title" x="446" y="82" text-anchor="middle">Bedrock</text>
+        <line class="life" x1="68" y1="94" x2="68" y2="400"/>
+        <line class="life" x1="194" y1="94" x2="194" y2="400"/>
+        <line class="life" x1="320" y1="94" x2="320" y2="400"/>
+        <line class="life" x1="446" y1="94" x2="446" y2="400"/>
+      </g>
+      <path class="e-api" d="M68 126 H188" marker-end="url(#s-api)"/><text class="t-mono" x="74" y="119">POST /api/agent/chat</text>
+      <path class="e-api" d="M194 156 H314" marker-end="url(#s-api)"/><text class="t-label" x="202" y="149">question + user</text>
+      <path class="e-api" d="M320 186 H440" marker-end="url(#s-api)"/><text class="t-label" x="328" y="179">messages + tools</text>
+      <path class="e-reply edge-api" d="M446 216 H326" marker-end="url(#s-api)"/><text class="t-label" x="330" y="209">"call get_dashboard"</text>
+      <path class="e" d="M320 236 h-28 v34 h22" marker-end="url(#s-ink)"/><text class="t-label" x="210" y="252" text-anchor="end">tool → service → SQL</text><text class="t-label" x="210" y="267" text-anchor="end">(this user's rows only)</text>
+      <path class="e-api" d="M320 296 H440" marker-end="url(#s-api)"/><text class="t-label" x="328" y="289">tool result</text>
+      <path class="e-reply edge-api" d="M446 326 H326" marker-end="url(#s-api)"/><text class="t-label" x="330" y="319">final answer</text>
+      <path class="e-reply edge-api" d="M320 356 H74" marker-end="url(#s-api)"/><text class="t-label" x="80" y="349">streamed to the screen</text>
+      <text class="t-sub" x="20" y="392">Changes (like "move $50 to Dining out") come back as a proposal; the user confirms with a normal API call.</text>
+
+      <!-- Divider -->
+      <line x1="560" y1="20" x2="560" y2="405" stroke="currentColor" stroke-opacity="0.15" stroke-width="1.5"/>
+
+      <!-- Panel B: background -->
+      <text class="t-title" x="590" y="24">Background · nobody waits</text>
+      <text class="t-sub" x="590" y="42">a worker does the job; the result lands in Postgres</text>
+      <g>
+        <rect class="box" x="590" y="60" width="96" height="34" rx="7"/><text class="t-title" x="638" y="82" text-anchor="middle">Browser</text>
+        <rect class="box" x="716" y="60" width="96" height="34" rx="7"/><text class="t-title" x="764" y="82" text-anchor="middle">API</text>
+        <rect class="box" x="842" y="60" width="96" height="34" rx="7"/><text class="t-title" x="890" y="82" text-anchor="middle">Postgres</text>
+        <rect class="box" x="968" y="60" width="96" height="34" rx="7"/><text class="t-title" x="1016" y="82" text-anchor="middle">Worker</text>
+        <line class="life" x1="638" y1="94" x2="638" y2="400"/>
+        <line class="life" x1="764" y1="94" x2="764" y2="400"/>
+        <line class="life" x1="890" y1="94" x2="890" y2="400"/>
+        <line class="life" x1="1016" y1="94" x2="1016" y2="400"/>
+      </g>
+      <path class="e-api" d="M638 126 H758" marker-end="url(#s-api)"/><text class="t-mono" x="644" y="119">POST /api/transactions</text>
+      <path class="e-api" d="M764 156 H884" marker-end="url(#s-api)"/><text class="t-label" x="772" y="149">row + job, one commit</text>
+      <path class="e-reply edge-api" d="M764 186 H644" marker-end="url(#s-api)"/><text class="t-label" x="650" y="179">201, right away</text>
+      <path class="e" d="M1016 226 H896" marker-end="url(#s-ink)"/><text class="t-label" x="902" y="219">claim next job</text>
+      <text class="t-label" x="1024" y="250">asks Bedrock:</text>
+      <text class="t-label" x="1024" y="265">"IGA" → Groceries</text>
+      <path class="e" d="M1016 296 H896" marker-end="url(#s-ink)"/><text class="t-label" x="902" y="289">service saves category</text>
+      <text class="t-mono" x="902" y="310">source = 'llm'</text>
+      <path class="e-api" d="M638 346 H758" marker-end="url(#s-api)"/><text class="t-label" x="644" y="339">next page load</text>
+      <path class="e-reply edge-api" d="M764 372 H644" marker-end="url(#s-api)"/><text class="t-label" x="650" y="365">shows Groceries</text>
+      <text class="t-sub" x="590" y="398">The jobs table is the queue: <tspan class="t-mono">FOR UPDATE SKIP LOCKED</tspan>. No SQS needed for one server.</text>
+    </svg>
+    </div>
+    <figcaption>Dashed arrows are answers. Chat answers travel back through the open request; background answers are saved first and read later. That keeps slow AI work from hitting CloudFront's 30-second wait for the server.</figcaption>
+  </figure>
+</section>
+
+<section aria-labelledby="decisions-h">
+  <h2 id="decisions-h">Settings that make it work</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>CloudFront behaviors</h3>
+      <ul>
+        <li><span class="mono">/api/*</span> and <span class="mono">/health</span> → EC2 origin, cache policy <span class="mono">CachingDisabled</span>, origin request policy <span class="mono">AllViewerExceptHostHeader</span> (cookies, query strings and headers reach the API).</li>
+        <li>Default <span class="mono">/*</span> → S3 with Origin Access Control; the bucket stays private.</li>
+        <li><span class="mono">assets/*</span> files have hashed names: cache for a year. <span class="mono">index.html</span>: <span class="mono">no-cache</span>, so a deploy shows up at once.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Lock the server to CloudFront</h3>
+      <ul>
+        <li>Security group: port 443 only from the AWS-managed prefix list <span class="mono">com.amazonaws.global.cloudfront.origin-facing</span>.</li>
+        <li>CloudFront adds a secret header (say <span class="mono">X-Origin-Verify</span>); Caddy refuses requests without it. The prefix list alone also admits other people's CloudFront distributions.</li>
+        <li>CloudFront needs a hostname for the origin, not an IP: an Elastic IP plus a record like <span class="mono">origin.budget.example.com</span>, with Caddy's own certificate for that name.</li>
+      </ul>
+    </div>
+    <div class="card gotcha">
+      <span class="tag">Gotcha</span>
+      <h3>Page URLs like /dashboard</h3>
+      <p>S3 has no file called <span class="mono">dashboard</span>. The usual fix, a custom error page that serves <span class="mono">index.html</span> on 403/404, applies to the whole distribution, so the API's real 404s ("transaction not found") would come back as the HTML page. Use a small CloudFront Function on the S3 behavior instead: any path without a file extension becomes <span class="mono">/index.html</span>.</p>
+    </div>
+    <div class="card gotcha">
+      <span class="tag">Gotcha</span>
+      <h3>Rate limits need the real visitor IP</h3>
+      <p>Behind CloudFront, every request reaches the server from a CloudFront address, so the per-IP buckets for login and sign-up would lump strangers together. Add the <span class="mono">CloudFront-Viewer-Address</span> header (visitor <span class="mono">IP:port</span>) to the origin request policy and have the app read the IP from it. That's safe only because nothing but CloudFront can reach the server.</p>
+    </div>
+    <div class="card gotcha">
+      <span class="tag">Gotcha</span>
+      <h3>CloudFront waits 30 seconds</h3>
+      <p>The default origin response timeout is 30 seconds (adjustable up to 60). An agent loop with several tool calls can take longer. Stream chat answers so bytes keep flowing, cap the loop's turns, and send anything slow to the worker.</p>
+    </div>
+    <div class="card">
+      <h3>Secrets and access</h3>
+      <ul>
+        <li>The EC2 instance role grants Bedrock, SSM Parameter Store, the backup bucket and CloudWatch. No keys on disk.</li>
+        <li>The owner (migration) password is only given to the migration step; the running app gets the app login only, as the README already requires.</li>
+        <li><span class="mono">COOKIE_SECURE=true</span>. Pick a region where Bedrock offers the model you want; the CloudFront certificate always lives in <span class="mono">us-east-1</span>.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Postgres on the same server, for now</h3>
+      <p>Cheapest, and the same Compose file you run locally. The cost is that the server is a single point of failure for your data too, so back it up from day one: nightly <span class="mono">pg_dump</span> to the backups bucket, plus daily EBS snapshots (Data Lifecycle Manager). Test a restore once.</p>
+    </div>
+    <div class="card">
+      <h3>Cost guard</h3>
+      <p>Set an AWS Budgets alert before launching anything. Bedrock bills per token, so also cap the agent: turns per question and questions per user per day, with the same token buckets the API already uses.</p>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="deploy-h">
+  <h2 id="deploy-h">Deploying a change</h2>
+  <ol class="steps prose">
+    <li><strong>GitHub Actions</strong> signs in to AWS with an OIDC role: no AWS keys stored in GitHub.</li>
+    <li><strong>Frontend:</strong> <code>npm run build</code>, <code>aws s3 sync dist/</code> to the site bucket, then invalidate <code>/index.html</code> only.</li>
+    <li><strong>Backend:</strong> build the Docker image and push it to ECR.</li>
+    <li><strong>On the server</strong> (SSM Run Command, no SSH): run <code>python -m app.migrate</code> once with the owner login, then <code>docker compose pull &amp;&amp; docker compose up -d</code> for the API and worker.</li>
+  </ol>
+</section>
+
+<section aria-labelledby="phases-h">
+  <h2 id="phases-h">From one server to more</h2>
+  <div class="phases">
+    <div class="phase now">
+      <h3>Phase 1 · this page</h3>
+      <div class="when">Now: you and a few users</div>
+      <ul>
+        <li>Route 53, CloudFront, S3, one EC2 server with Caddy, API, worker and Postgres.</li>
+        <li>Bedrock through the instance role.</li>
+        <li>Backups, alarms, a budget alert.</li>
+      </ul>
+    </div>
+    <div class="phase">
+      <h3>Phase 2 · two servers</h3>
+      <div class="when">When downtime or load starts to matter</div>
+      <ul>
+        <li>Postgres moves to <strong>RDS</strong> first: servers that come and go can't hold the data.</li>
+        <li>An <strong>Application Load Balancer</strong> with an Auto Scaling group of two becomes CloudFront's origin.</li>
+        <li>Rate-limit buckets live in memory per server, so move them to a shared store (a Postgres table or ElastiCache), or add AWS WAF rate rules on CloudFront.</li>
+        <li>The jobs table keeps working: <span class="mono">SKIP LOCKED</span> lets workers on both servers share it.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Budget app · AWS plan for phase 1 · Domain, region and Bedrock model are still open. Source: <span class="mono">docs/aws-architecture.html</span> in the repository.
+</footer>
+
+</main>
+</body>
+</html>
