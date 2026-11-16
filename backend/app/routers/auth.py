@@ -11,7 +11,9 @@ from fastapi import APIRouter, Cookie, Depends, Response, status
 from pydantic import BaseModel
 
 from app.config import get_settings
-from app.dependencies import SESSION_COOKIE, get_auth_service, get_current_user_id
+from app.dependencies import (
+    SESSION_COOKIE, get_auth_service, get_current_user_id, limit_delete_account, limit_login, limit_signup,
+)
 from app.services.auth_service import AuthService, LoggedIn
 
 router = APIRouter(tags=["auth"])
@@ -51,14 +53,15 @@ def _clear_session_cookie(response: Response) -> None:
                            secure=get_settings().cookie_secure)
 
 
-@router.post("/api/auth/signup", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+@router.post("/api/auth/signup", response_model=UserOut, status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(limit_signup)])
 def sign_up(body: Credentials, response: Response, service: Service):
     logged_in = service.sign_up(body.email, body.password)
     _set_session_cookie(response, logged_in)
     return logged_in.user
 
 
-@router.post("/api/auth/login", response_model=UserOut)
+@router.post("/api/auth/login", response_model=UserOut, dependencies=[Depends(limit_login)])
 def log_in(body: Credentials, response: Response, service: Service):
     logged_in = service.log_in(body.email, body.password)
     _set_session_cookie(response, logged_in)
@@ -85,7 +88,8 @@ def export_my_data(user_id: UserId, service: Service):
     return service.export(user_id)
 
 
-@router.post("/api/account/delete", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/api/account/delete", status_code=status.HTTP_204_NO_CONTENT,
+             dependencies=[Depends(limit_delete_account)])
 def delete_my_account(body: PasswordIn, user_id: UserId, service: Service):
     """Deletes your account and all your data. Asks for the password again."""
     service.delete_account(user_id, body.password)

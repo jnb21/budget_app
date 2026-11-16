@@ -19,4 +19,8 @@ class UnauthorizedError(Exception):
 
 
 class TooManyRequestsError(Exception):
-    """Too many failed attempts: wait and try again. -> 429"""
+    """Too many attempts or requests: wait and try again. -> 429"""
+
+    def __init__(self, message: str, retry_after: int | None = None):
+        super().__init__(message)
+        self.retry_after = retry_after  # seconds to wait; sent as the Retry-After header
