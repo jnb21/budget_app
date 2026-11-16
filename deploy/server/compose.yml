@@ -1,0 +1,79 @@
+# Production, on the EC2 server. deploy/server/update.sh copies this file to
+# /opt/budget/ and starts it; the values come from /opt/budget/.env, which
+# update.sh writes from SSM Parameter Store (passwords) and the stack's outputs.
+#
+#   CloudFront ──HTTPS──▶ caddy :443 ──▶ api :8000 ──▶ db :5432
+#
+# Official images come from AWS's copy on ECR Public (no Docker Hub pull limits).
+# Only caddy publishes ports. The API and Postgres are reachable on Docker's
+# internal network only, so nothing on the internet can talk to them directly.
+name: budget
+
+x-logging: &logging
+  driver: awslogs # to CloudWatch Logs; `docker compose logs` still works
+  options:
+    awslogs-region: ${AWS_REGION}
+    awslogs-group: ${LOG_GROUP}
+    tag: "{{.Name}}"
+
+services:
+  caddy:
+    image: public.ecr.aws/docker/library/caddy:2.10
+    restart: unless-stopped
+    ports:
+      - "80:80" # Let's Encrypt only: getting and renewing this server's certificate
+      - "443:443" # CloudFront only (the AWS security group allows nothing else)
+    environment:
+      ORIGIN_DOMAIN: ${ORIGIN_DOMAIN}
+      ORIGIN_SECRET: ${ORIGIN_SECRET}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /data/caddy:/data # the certificate, kept on the data volume
+    depends_on:
+      - api
+    logging: *logging
+
+  api:
+    image: ${API_IMAGE}
+    restart: unless-stopped
+    environment:
+      # The app's login only: it can't change tables or skip row-level security.
+      # The owner's password is never given to the running app.
+      DATABASE_URL: postgresql://budget_app:${APP_DB_PASSWORD}@db:5432/budget
+      COOKIE_SECURE: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+    logging: *logging
+
+  # Runs once per deploy (update.sh: docker compose run --rm migrate), never stays up.
+  migrate:
+    image: ${API_IMAGE}
+    command: ["python", "-m", "app.migrate"]
+    profiles: [tools]
+    environment:
+      MIGRATION_DATABASE_URL: postgresql://budget:${OWNER_DB_PASSWORD}@db:5432/budget
+      DATABASE_URL: postgresql://budget_app:${APP_DB_PASSWORD}@db:5432/budget # migrations set this login's password
+    depends_on:
+      db:
+        condition: service_healthy
+    logging: *logging
+
+  db:
+    image: public.ecr.aws/docker/library/postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: budget
+      POSTGRES_DB: budget
+      POSTGRES_PASSWORD: ${OWNER_DB_PASSWORD}
+    volumes:
+      - /data/postgres:/var/lib/postgresql # on the separate EBS data volume
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U budget -d budget"]
+      interval: 5s
+      retries: 20
+    logging: *logging
+
+  # The AI worker joins here when it's built (see docs/aws-architecture.html):
+  # same image as the API, its own command and its own database login.

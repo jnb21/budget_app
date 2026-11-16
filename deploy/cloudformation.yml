@@ -1,0 +1,523 @@
+# Everything on AWS for phase 1 of docs/aws-architecture.html, in one stack.
+# Don't run this by hand: deploy/setup.sh creates the secrets it needs first,
+# looks up two values, and then creates or updates this stack.
+#
+#   Route 53 ─▶ CloudFront ─┬─ /*            ─▶ S3 site bucket (private)
+#                           └─ /api/*, /health ─▶ EC2: Caddy ▶ API ▶ Postgres
+#
+# Region: us-east-1 only. CloudFront's certificate must live there, and one
+# region keeps this to one stack.
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Budget app, phase 1 (one server, no load balancer)
+
+Parameters:
+  DomainName:
+    Type: String
+    Description: Where the app lives, e.g. budget.example.com (its hosted zone must be in Route 53)
+    AllowedPattern: "^[a-z0-9.-]+\\.[a-z]{2,}$"
+  HostedZoneId:
+    Type: AWS::Route53::HostedZone::Id
+    Description: The Route 53 hosted zone that holds DomainName
+  AlertEmail:
+    Type: String
+    Description: Gets budget alerts, and is given to Let's Encrypt for certificate notices
+  CloudFrontPrefixListId:
+    Type: String
+    Description: ID of com.amazonaws.global.cloudfront.origin-facing (setup.sh looks it up)
+  OriginSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    Description: Secret header value CloudFront sends to the server (setup.sh reads it from SSM)
+  ImageId:
+    Type: AWS::EC2::Image::Id
+    Description: Amazon Linux 2023 ARM image. Chosen once at creation (setup.sh); changing it replaces the server
+  InstanceType:
+    Type: String
+    Default: t4g.small
+    AllowedValues: [t4g.small, t4g.medium, t4g.large]
+  AvailabilityZone:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Default: us-east-1a
+  DataVolumeGiB:
+    Type: Number
+    Default: 20
+    MinValue: 10
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 30
+    Description: Email alerts at 80% of this (actual) and 100% (forecast)
+
+Rules:
+  OnlyUsEast1:
+    Assertions:
+      - Assert: !Equals [!Ref "AWS::Region", us-east-1]
+        AssertDescription: Deploy in us-east-1 (CloudFront certificates must be there)
+
+Resources:
+  # ---------- Network: one public subnet, no NAT gateway ----------
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.20.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags: [{ Key: Name, Value: !Ref "AWS::StackName" }]
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Ref AvailabilityZone
+      CidrBlock: 10.20.1.0/24
+      MapPublicIpOnLaunch: true
+      Tags: [{ Key: Name, Value: !Sub "${AWS::StackName}-public" }]
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  SubnetRoutes:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref RouteTable
+
+  ServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: HTTPS from CloudFront only, HTTP for Lets Encrypt, no SSH
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - Description: HTTPS from CloudFront origin-facing addresses only
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourcePrefixListId: !Ref CloudFrontPrefixListId
+        - Description: Lets Encrypt certificate checks (Caddy only redirects here)
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  # ---------- The server ----------
+  ServerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore # Run Command + Session Manager, instead of SSH
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly # pull the API image
+      Policies:
+        - PolicyName: budget-server
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadOwnSecrets
+                Effect: Allow
+                Action: [ssm:GetParameter, ssm:GetParameters]
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/budget/*"
+              - Sid: ReleasesAndBackups
+                Effect: Allow
+                Action: [s3:GetObject, s3:PutObject]
+                Resource: !Sub "${OpsBucket.Arn}/*"
+              - Sid: ListReleases
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt OpsBucket.Arn
+              - Sid: Logs
+                Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub "${LogGroup.Arn}:*"
+              - Sid: BedrockForTheAgent # used once the AI phase lands; no API key needed
+                Effect: Allow
+                Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream]
+                Resource: "*"
+  ServerProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref ServerRole]
+
+  ServerLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        MetadataOptions:
+          HttpTokens: required # IMDSv2 only
+          HttpPutResponseHopLimit: 2 # so containers can use the server's role (Bedrock, later)
+          HttpEndpoint: enabled
+
+  Server:
+    Type: AWS::EC2::Instance
+    DependsOn: DefaultRoute # internet access before first boot
+    Properties:
+      ImageId: !Ref ImageId
+      InstanceType: !Ref InstanceType
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds: [!Ref ServerSecurityGroup]
+      IamInstanceProfile: !Ref ServerProfile
+      LaunchTemplate:
+        LaunchTemplateId: !Ref ServerLaunchTemplate
+        Version: !GetAtt ServerLaunchTemplate.LatestVersionNumber
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: 20, VolumeType: gp3, Encrypted: true }
+      Tags: [{ Key: Name, Value: !Ref "AWS::StackName" }]
+      # First boot only: Docker, Docker Compose, the data volume, and the settings
+      # the deploy scripts read. Everything else arrives with deploy/deploy.sh.
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+          dnf install -y docker
+          systemctl enable --now docker
+
+          COMPOSE_VERSION=v5.6.1
+          COMPOSE_SHA256=42cfa75f51ad0ccf290bad37899e0038a8c10a0069e85233ecc1d53e3ff1347d
+          mkdir -p /usr/local/lib/docker/cli-plugins
+          curl -fsSL --retry 8 --retry-all-errors -o /tmp/docker-compose \
+            "https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-linux-aarch64"
+          echo "$COMPOSE_SHA256  /tmp/docker-compose" | sha256sum -c -
+          install -m 755 /tmp/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose
+
+          # The data volume (Postgres + Caddy's certificate) is a separate disk, so
+          # it survives the server being replaced. Format it only if it's new.
+          VOL=${DataVolume}
+          DEV=/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${!VOL//-/}
+          for _ in $(seq 1 90); do [ -e "$DEV" ] && break; sleep 5; done
+          blkid "$DEV" || mkfs.xfs "$DEV"
+          mkdir -p /data
+          grep -q " /data " /etc/fstab || echo "$DEV /data xfs defaults,nofail 0 2" >> /etc/fstab
+          mount -a
+          mkdir -p /data/postgres /data/caddy /opt/budget/releases
+
+          cat > /etc/budget.env <<EOF
+          AWS_REGION=${AWS::Region}
+          OPS_BUCKET=${OpsBucket}
+          ORIGIN_DOMAIN=origin.${DomainName}
+          ACME_EMAIL=${AlertEmail}
+          LOG_GROUP=${LogGroup}
+          PARAM_PREFIX=/budget
+          EOF
+
+  DataVolume:
+    Type: AWS::EC2::Volume
+    DeletionPolicy: Snapshot # deleting the stack keeps a last snapshot of the data
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      AvailabilityZone: !Ref AvailabilityZone
+      Size: !Ref DataVolumeGiB
+      VolumeType: gp3
+      Encrypted: true
+      Tags:
+        - { Key: Name, Value: !Sub "${AWS::StackName}-data" }
+        - { Key: budget-backup, Value: daily }
+  DataVolumeAttachment:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref Server
+      VolumeId: !Ref DataVolume
+      Device: /dev/sdf
+
+  ServerIp:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  ServerIpAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt ServerIp.AllocationId
+      InstanceId: !Ref Server
+
+  # Restart the server on healthy hardware if AWS's own checks fail.
+  ServerRecoveryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Recover the budget server when its host fails
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_System
+      Dimensions: [{ Name: InstanceId, Value: !Ref Server }]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions: [!Sub "arn:aws:automate:${AWS::Region}:ec2:recover"]
+
+  # Daily snapshots of the data volume, kept a week (on top of nightly pg_dump).
+  SnapshotRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: dlm.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSDataLifecycleManagerServiceRole
+  DailySnapshots:
+    Type: AWS::DLM::LifecyclePolicy
+    Properties:
+      Description: Daily snapshots of the budget data volume
+      State: ENABLED
+      ExecutionRoleArn: !GetAtt SnapshotRole.Arn
+      PolicyDetails:
+        ResourceTypes: [VOLUME]
+        TargetTags: [{ Key: budget-backup, Value: daily }]
+        Schedules:
+          - Name: daily
+            CreateRule: { Interval: 24, IntervalUnit: HOURS, Times: ["06:00"] }
+            RetainRule: { Count: 7 }
+            CopyTags: true
+
+  # ---------- Storage, images, logs ----------
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      OwnershipControls: { Rules: [{ ObjectOwnership: BucketOwnerEnforced }] }
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: OnlyThisCloudFrontDistribution
+            Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:GetObject
+            Resource: !Sub "${SiteBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+
+  # releases/: the server files each deploy ships; backups/: nightly pg_dump
+  OpsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain # backups outlive the stack
+    UpdateReplacePolicy: Retain
+    Properties:
+      OwnershipControls: { Rules: [{ ObjectOwnership: BucketOwnerEnforced }] }
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - { Id: old-releases, Status: Enabled, Prefix: releases/, ExpirationInDays: 30 }
+          - { Id: old-backups, Status: Enabled, Prefix: backups/, ExpirationInDays: 35 }
+
+  ApiRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      EmptyOnDelete: true
+      ImageScanningConfiguration: { ScanOnPush: true }
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {"rules": [{"rulePriority": 1, "description": "keep the last 10 images",
+            "selection": {"tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 10},
+            "action": {"type": "expire"}}]}
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/${AWS::StackName}/server"
+      RetentionInDays: 30
+
+  # ---------- CloudFront ----------
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref HostedZoneId # validates itself through Route 53
+
+  SiteOriginAccess:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${AWS::StackName}-site"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # Page URLs like /dashboard have no file in S3: serve the app's index.html and
+  # let React Router pick the page. Only on the S3 behavior, so the API's own
+  # 404s stay JSON (a distribution-wide error page would replace them).
+  SpaRewriteFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub "${AWS::StackName}-spa-rewrite"
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Page URLs without a file extension get index.html
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        function handler(event) {
+          var request = event.request;
+          var last = request.uri.split('/').pop();
+          if (last.indexOf('.') === -1) {
+            request.uri = '/index.html';
+          }
+          return request;
+        }
+
+  # The visitor's IP, in a header the visitor can't fake (this replaces any
+  # X-Viewer-Ip they send). Caddy turns it into X-Forwarded-For for the rate limits.
+  ViewerIpFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub "${AWS::StackName}-viewer-ip"
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Pass the visitor's IP to the API
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        function handler(event) {
+          var request = event.request;
+          request.headers['x-viewer-ip'] = { value: event.viewer.ip };
+          return request;
+        }
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub "${AWS::StackName}: app from S3, /api to the server"
+        Aliases: [!Ref DomainName]
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          AcmCertificateArn: !Ref Certificate
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        Origins:
+          - Id: site
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt SiteOriginAccess.Id
+            S3OriginConfig: { OriginAccessIdentity: "" }
+          - Id: server
+            DomainName: !Sub "origin.${DomainName}"
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              HTTPSPort: 443
+              OriginSSLProtocols: [TLSv1.2]
+              OriginReadTimeout: 60 # the most allowed without a quota request; slow AI work goes to the worker
+            OriginCustomHeaders:
+              - HeaderName: X-Origin-Verify
+                HeaderValue: !Ref OriginSecret
+        DefaultCacheBehavior:
+          TargetOriginId: site
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # Managed-CachingOptimized
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt SpaRewriteFunction.FunctionARN
+        CacheBehaviors:
+          - PathPattern: /api/*
+            TargetOriginId: server
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+            Compress: true
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # Managed-CachingDisabled
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac # Managed-AllViewerExceptHostHeader: cookies, query, headers
+            FunctionAssociations:
+              - EventType: viewer-request
+                FunctionARN: !GetAtt ViewerIpFunction.FunctionARN
+          - PathPattern: /health
+            TargetOriginId: server
+            ViewerProtocolPolicy: https-only
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+            FunctionAssociations:
+              - EventType: viewer-request
+                FunctionARN: !GetAtt ViewerIpFunction.FunctionARN
+
+  # ---------- DNS ----------
+  SiteRecordIpv4:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt Distribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2 # the fixed zone ID for every CloudFront alias
+  SiteRecordIpv6:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: AAAA
+      AliasTarget:
+        DNSName: !GetAtt Distribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+  OriginRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub "origin.${DomainName}"
+      Type: A
+      TTL: "300"
+      ResourceRecords: [!Ref ServerIp]
+
+  # ---------- Cost guard ----------
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: !Sub "${AWS::StackName}-monthly"
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: { Amount: !Ref MonthlyBudgetUsd, Unit: USD }
+      NotificationsWithSubscribers:
+        - Notification: { NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 80 }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref AlertEmail }]
+        - Notification: { NotificationType: FORECASTED, ComparisonOperator: GREATER_THAN, Threshold: 100 }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref AlertEmail }]
+
+Outputs:
+  Url:
+    Value: !Sub "https://${DomainName}"
+  SiteBucket:
+    Value: !Ref SiteBucket
+  OpsBucket:
+    Value: !Ref OpsBucket
+  RepositoryUri:
+    Value: !GetAtt ApiRepository.RepositoryUri
+  DistributionId:
+    Value: !Ref Distribution
+  InstanceId:
+    Value: !Ref Server
+  LogGroup:
+    Value: !Ref LogGroup

@@ -418,7 +418,7 @@ a:focus-visible { outline: 2px solid var(--api); outline-offset: 2px; }
     <div class="card gotcha">
       <span class="tag">Gotcha</span>
       <h3>Rate limits need the real visitor IP</h3>
-      <p>Behind CloudFront, every request reaches the server from a CloudFront address, so the per-IP buckets for login and sign-up would lump strangers together. Add the <span class="mono">CloudFront-Viewer-Address</span> header (visitor <span class="mono">IP:port</span>) to the origin request policy and have the app read the IP from it. That's safe only because nothing but CloudFront can reach the server.</p>
+      <p>Behind CloudFront, every request reaches the server from a CloudFront address, so the per-IP buckets for login and sign-up would lump strangers together. The fix needs no app change: a CloudFront Function on <span class="mono">/api/*</span> writes the visitor's IP into <span class="mono">X-Viewer-Ip</span>, replacing anything the visitor sent, and Caddy passes it on as <span class="mono">X-Forwarded-For</span>. That's safe only because nothing but CloudFront can reach the server.</p>
     </div>
     <div class="card gotcha">
       <span class="tag">Gotcha</span>
@@ -446,11 +446,14 @@ a:focus-visible { outline: 2px solid var(--api); outline-offset: 2px; }
 
 <section aria-labelledby="deploy-h">
   <h2 id="deploy-h">Deploying a change</h2>
+  <div class="prose">
+    <p>Built and ready in the repository (<code>deploy/README.md</code>): <code>deploy/setup.sh</code> creates everything once from one CloudFormation template, then <code>deploy/deploy.sh</code> ships each release from your laptop:</p>
+  </div>
   <ol class="steps prose">
-    <li><strong>GitHub Actions</strong> signs in to AWS with an OIDC role: no AWS keys stored in GitHub.</li>
+    <li><strong>Backend:</strong> build the Docker image for ARM and push it to ECR.</li>
+    <li><strong>On the server</strong> (SSM Run Command, no SSH): run <code>python -m app.migrate</code> once with the owner login, then <code>docker compose up -d</code>, then check <code>/health</code> through Caddy. If that fails, the old API keeps running and the next step doesn't happen.</li>
     <li><strong>Frontend:</strong> <code>npm run build</code>, <code>aws s3 sync dist/</code> to the site bucket, then invalidate <code>/index.html</code> only.</li>
-    <li><strong>Backend:</strong> build the Docker image and push it to ECR.</li>
-    <li><strong>On the server</strong> (SSM Run Command, no SSH): run <code>python -m app.migrate</code> once with the owner login, then <code>docker compose pull &amp;&amp; docker compose up -d</code> for the API and worker.</li>
+    <li><strong>Later, GitHub Actions</strong> can run the same steps on every push, signing in with an OIDC role instead of your laptop's credentials.</li>
   </ol>
 </section>
 
@@ -480,7 +483,7 @@ a:focus-visible { outline: 2px solid var(--api); outline-offset: 2px; }
 </section>
 
 <footer>
-  Budget app · AWS plan for phase 1 · Domain, region and Bedrock model are still open. Source: <span class="mono">docs/aws-architecture.html</span> in the repository.
+  Budget app · AWS plan for phase 1 · Region: us-east-1. Domain and Bedrock model are still open. Source: <span class="mono">docs/aws-architecture.html</span>; how to run it: <span class="mono">deploy/README.md</span>.
 </footer>
 
 </main>

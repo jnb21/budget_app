@@ -1,0 +1,31 @@
+# The web server in front of the API, on the EC2 server.
+#
+# Only CloudFront may come in:
+# - the AWS security group lets only CloudFront's addresses reach port 443;
+# - each request must carry the secret header CloudFront adds (X-Origin-Verify).
+#   The security group alone would also admit other people's CloudFront setups.
+# Port 80 answers Let's Encrypt (Caddy gets and renews this server's certificate
+# by itself) and redirects everything else to HTTPS, where it's refused.
+{
+	email {$ACME_EMAIL}
+}
+
+{$ORIGIN_DOMAIN} {
+	@cloudfront header X-Origin-Verify {$ORIGIN_SECRET}
+
+	handle @cloudfront {
+		reverse_proxy api:8000 {
+			header_up -X-Origin-Verify
+			# The visitor's real IP. A CloudFront Function (viewer-ip, in
+			# deploy/cloudformation.yml) writes it into X-Viewer-Ip, replacing
+			# anything the visitor sent, so it can't be faked. uvicorn reads it
+			# from X-Forwarded-For, and the rate limits then count each visitor
+			# on their own instead of per CloudFront address.
+			header_up X-Forwarded-For {http.request.header.X-Viewer-Ip}
+		}
+	}
+
+	handle {
+		respond "Forbidden" 403
+	}
+}

@@ -167,6 +167,9 @@ budget_app/
 │   ├── migrations/           numbered .sql files that create/change tables
 │   ├── tests/
 │   └── requirements.txt
+├── deploy/                   AWS: setup.sh (once), deploy.sh (each release), cloudformation.yml,
+│   └── server/               what runs on the server: compose.yml, Caddyfile, update.sh, backup.sh
+├── docs/aws-architecture.html  the AWS plan, with diagrams
 ├── docker-compose.yml        Postgres for local development
 └── README.md
 ```
@@ -192,19 +195,22 @@ budget_app/
 | "Spent vs. last month" | Same days of last month while a month is still running | Half a month always looks cheaper than a whole one |
 | Pages and URLs | React Router; the month is shared state, not in the URL | Switching pages keeps the month you picked |
 | Icons and font | `lucide-react`, Urbanist (self-hosted via `@fontsource`) | No requests to font or icon CDNs |
+| AWS setup | One CloudFormation template + two shell scripts, in us-east-1 | Only the AWS CLI and Docker needed; the whole setup is one readable file. CloudFront's certificate must be in us-east-1 anyway |
+| Deploys | From your laptop: image to ECR, server updated through SSM Run Command | No SSH port, no AWS keys on the server; GitHub Actions can run the same steps later |
+| Visitor IP behind CloudFront | A CloudFront Function writes `X-Viewer-Ip`; Caddy passes it on as `X-Forwarded-For` | The rate limits keep working with no app change, and visitors can't fake it |
+| Postgres in production | On the server, data on its own EBS disk; nightly `pg_dump` to S3 + daily snapshots | Cheapest for phase 1, and the disk survives a server replacement. RDS comes with a second server |
 
 ## Next steps
 
 1. ~~Frontend pages~~ and ~~login~~: done.
-2. **Deploy on AWS** (next), plan and diagrams in
-   [`docs/aws-architecture.html`](docs/aws-architecture.html): Route 53 →
-   CloudFront, which serves the app from a private S3 bucket and sends
-   `/api/*` to one EC2 server (Caddy, API, worker and Postgres in Docker
-   Compose; only CloudFront can reach it). Set `COOKIE_SECURE=true`. Don't run
-   the seed script there. Run migrations as a separate step with the owner
-   login (see [Two database logins](#two-database-logins)). Behind CloudFront,
-   take the visitor's IP for the rate limits from the `CloudFront-Viewer-Address`
-   header, or every visitor shares one bucket (see [Rate limits](#rate-limits)).
+2. **Deploy on AWS** (next): ready to run, see **[`deploy/README.md`](deploy/README.md)**
+   (one `setup.sh`, then `deploy.sh` per release; plan and diagrams in
+   [`docs/aws-architecture.html`](docs/aws-architecture.html)). Route 53 →
+   CloudFront, which serves the app from a private S3 bucket and sends `/api/*`
+   to one EC2 server (Caddy, API and Postgres in Docker Compose; only CloudFront
+   can reach it). It already sets `COOKIE_SECURE=true`, runs migrations as a
+   separate step with the owner login, and passes the visitor's real IP to the
+   rate limits. Never run the seed script there.
 3. **AI, the main goal of the project**, using **Amazon Bedrock** as the model
    provider: auto-categorization (rules first, LLM for unknown merchants) and a
    chat agent that calls services and needs confirmation before any change.
